@@ -1,0 +1,6 @@
+{
+  "name": "Zaymera",
+  "description": "Minimal luxury bridal, haute couture & designer boutique hub by Zaymera.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

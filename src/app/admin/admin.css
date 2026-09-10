@@ -1,0 +1,317 @@
+/* ==========================================================================
+   ZAYMERA HAUTE COUTURE ATELIER - COMPLETE ADMIN DESIGN SYSTEM
+   ========================================================================== */
+
+/* Root Theme Container */
+.admin-theme {
+  background-color: #0F0D0C !important;
+  color: #FAF8F5 !important;
+  color-scheme: dark;
+  font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+  min-height: 100vh;
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+.admin-theme *,
+.admin-theme *::before,
+.admin-theme *::after {
+  box-sizing: border-box;
+}
+
+.admin-theme a {
+  color: inherit;
+  text-decoration: none;
+  transition: all 0.2s ease;
+}
+
+.admin-theme img {
+  max-width: 100%;
+  height: auto;
+  display: block;
+}
+
+/* ==========================================================================
+   HEADER & SIDEBAR NAVIGATION
+   ========================================================================== */
+
+.admin-header {
+  background-color: rgba(22, 18, 16, 0.98) !important;
+  border-bottom: 1px solid #2B231D !important;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.admin-sidebar {
+  background-color: #14100E !important;
+  border-right: 1px solid #26201B !important;
+}
+
+.admin-nav-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  border-radius: 12px;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: #B8A898;
+  transition: all 0.2s ease;
+}
+
+.admin-nav-item:hover {
+  background-color: #1E1815;
+  color: #FAF8F5;
+}
+
+.admin-nav-item.active {
+  background: linear-gradient(90deg, #2B211A 0%, #1F1713 100%);
+  color: #E2B755;
+  border-left: 4px solid #C5A059;
+  font-weight: 600;
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.4);
+}
+
+/* ==========================================================================
+   CARDS & CONTAINERS
+   ========================================================================== */
+
+.admin-card {
+  background-color: #14100E !important;
+  border: 1px solid #28201A !important;
+  border-radius: 20px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+  color: #FAF8F5 !important;
+  transition: border-color 0.2s ease, transform 0.2s ease;
+}
+
+.admin-card:hover {
+  border-color: #3D3026 !important;
+}
+
+.admin-card-inner {
+  background-color: #1A1411 !important;
+  border: 1px solid #2B211A !important;
+  border-radius: 14px;
+}
+
+.admin-kpi-box {
+  background-color: #15110F;
+  border: 1px solid #28211C;
+  border-radius: 18px;
+  padding: 16px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.35);
+  transition: border-color 0.2s ease;
+}
+
+.admin-kpi-box:hover {
+  border-color: #3E322A;
+}
+
+/* ==========================================================================
+   BUTTONS & ACTIONS
+   ========================================================================== */
+
+.admin-btn-gold {
+  background: linear-gradient(135deg, #C5A059 0%, #9B2242 100%) !important;
+  color: #FFFFFF !important;
+  font-weight: 700 !important;
+  border-radius: 12px;
+  padding: 10px 18px;
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  border: none !important;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  box-shadow: 0 4px 15px rgba(155, 34, 66, 0.3);
+  transition: all 0.2s ease;
+}
+
+.admin-btn-gold:hover {
+  opacity: 0.95;
+  transform: translateY(-1px);
+  box-shadow: 0 6px 20px rgba(197, 160, 89, 0.4);
+}
+
+.admin-btn-gold:active {
+  transform: scale(0.98);
+}
+
+.admin-btn-dark {
+  background-color: #201915 !important;
+  border: 1px solid #362A21 !important;
+  color: #FAF8F5 !important;
+  font-weight: 600 !important;
+  border-radius: 12px;
+  padding: 9px 16px;
+  font-size: 12px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  transition: all 0.2s ease;
+}
+
+.admin-btn-dark:hover {
+  background-color: #2C221D !important;
+  color: #FFFFFF !important;
+  border-color: #4D3B2E !important;
+}
+
+/* ==========================================================================
+   INPUTS & FORM CONTROLS
+   ========================================================================== */
+
+.admin-input,
+.admin-theme input[type="text"],
+.admin-theme input[type="email"],
+.admin-theme input[type="password"],
+.admin-theme input[type="number"],
+.admin-theme input[type="date"],
+.admin-theme select,
+.admin-theme textarea {
+  background-color: #1A1412 !important;
+  border: 1px solid #30251E !important;
+  color: #FAF8F5 !important;
+  border-radius: 12px;
+  padding: 10px 14px;
+  font-size: 12.5px;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.admin-input:focus,
+.admin-theme input:focus,
+.admin-theme select:focus,
+.admin-theme textarea:focus {
+  border-color: #C5A059 !important;
+  outline: none !important;
+  box-shadow: 0 0 0 2px rgba(197, 160, 89, 0.2) !important;
+}
+
+.admin-theme select option {
+  background-color: #1A1412 !important;
+  color: #FAF8F5 !important;
+}
+
+/* ==========================================================================
+   BADGES & PILLS
+   ========================================================================== */
+
+.badge-gold {
+  background-color: #2D2214;
+  color: #E2B755;
+  border: 1px solid #57411E;
+  padding: 3px 9px;
+  border-radius: 9999px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.badge-crimson {
+  background-color: #38121C;
+  color: #FB7185;
+  border: 1px solid #6E1F33;
+  padding: 3px 9px;
+  border-radius: 9999px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.badge-emerald {
+  background-color: #142E1B;
+  color: #4ADE80;
+  border: 1px solid #245A31;
+  padding: 3px 9px;
+  border-radius: 9999px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.badge-amber {
+  background-color: #302410;
+  color: #FBBF24;
+  border: 1px solid #5C4318;
+  padding: 3px 9px;
+  border-radius: 9999px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+/* ==========================================================================
+   DATA TABLES
+   ========================================================================== */
+
+.admin-table-container {
+  border-radius: 20px;
+  background-color: #14100E;
+  border: 1px solid #26201B;
+  overflow: hidden;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+}
+
+.admin-table {
+  width: 100%;
+  text-align: left;
+  font-size: 12px;
+  color: #FAF8F5;
+  border-collapse: collapse;
+}
+
+.admin-table thead {
+  background-color: #181310;
+  border-bottom: 1px solid #26201B;
+  color: #8C7B6C;
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 600;
+}
+
+.admin-table th,
+.admin-table td {
+  padding: 14px 16px;
+}
+
+.admin-table tbody tr {
+  border-bottom: 1px solid #1E1713;
+  transition: background-color 0.15s ease;
+}
+
+.admin-table tbody tr:hover {
+  background-color: #1A1411;
+}
+
+/* ==========================================================================
+   CUSTOM SCROLLBAR
+   ========================================================================== */
+
+.admin-theme ::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.admin-theme ::-webkit-scrollbar-track {
+  background: #14100E;
+}
+
+.admin-theme ::-webkit-scrollbar-thumb {
+  background: #3A2F28;
+  border-radius: 9999px;
+}
+
+.admin-theme ::-webkit-scrollbar-thumb:hover {
+  background: #C5A059;
+}
