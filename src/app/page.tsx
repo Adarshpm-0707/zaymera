@@ -1,13 +1,13 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { SLIDES_DATA } from '@/constants/slides';
 import { PRODUCTS_CATALOG } from '@/constants/catalog';
 import { SlideData, ProductItem } from '@/types';
 import { fetchProducts, getInitialProducts, getLocalProducts } from '@/lib/supabase/services';
 
 // Modular Layout Components
-import { TopBar } from '@/components/layout/TopBar';
 import { Header } from '@/components/layout/Header';
 import { CategoryMegaMenu } from '@/components/layout/CategoryMegaMenu';
 
@@ -64,8 +64,10 @@ export default function Home() {
     addToCart,
     addCustomToCart,
     removeCartItem,
-    updateCartQuantity
+    updateCartQuantity,
+    clearCart
   } = useCart();
+
 
   const {
     wishlistItems,
@@ -87,10 +89,7 @@ export default function Home() {
   const [selectedSlideProduct, setSelectedSlideProduct] = useState<SlideData | null>(null);
   const [selectedCategory, setSelectedCategory] = useState('all');
 
-  const handleAddToCartFromQuickView = (productName: string, priceStr: string, size: string) => {
-    addCustomToCart(productName, priceStr, size, selectedSlideProduct?.image);
-    setIsCartOpen(true);
-  };
+  const router = useRouter();
 
   const handleAddDirectProduct = (product: ProductItem, size?: string) => {
     addToCart(product, size);
@@ -103,27 +102,15 @@ export default function Home() {
   };
 
   const handleShopNow = (slide: SlideData) => {
-    setSelectedSlideProduct(slide);
+    if (slide.productSlug) {
+      router.push(`/products/detail?id=${encodeURIComponent(slide.productSlug)}`);
+    } else {
+      router.push('/products');
+    }
   };
 
   const handleSelectProductForView = (product: ProductItem) => {
-    const slideAdapted: SlideData = {
-      id: 99,
-      tag: product.tag,
-      headlineStart: product.name,
-      headlineItalic: "Artisan Collection",
-      description: product.description,
-      primaryCta: "Shop Piece",
-      primaryHref: "#",
-      image: product.image,
-      theme: 'dark-gold',
-      productName: product.name,
-      productPrice: `₹${product.price.toLocaleString()}`,
-      productSlug: product.id,
-      badge: product.fabric,
-      accent: product.work
-    };
-    setSelectedSlideProduct(slideAdapted);
+    router.push(`/products/detail?id=${encodeURIComponent(product.id)}`);
   };
 
   const handleExploreCategory = (category: string) => {
@@ -134,16 +121,9 @@ export default function Home() {
     }
   };
 
-  const activeQuickViewProduct = selectedSlideProduct
-    ? (productsList.find(p => p.id === selectedSlideProduct.productSlug || p.name === selectedSlideProduct.productName) ||
-       PRODUCTS_CATALOG.find(p => p.id === selectedSlideProduct.productSlug || p.name === selectedSlideProduct.productName))
-    : null;
-
   return (
     <div className="min-h-screen flex flex-col bg-[#FAF8F5] text-[#221C18] font-sans-clean">
-   
-
-      {/* 2. Main Navigation Header */}
+      {/* Main Navigation Header */}
       <div className="relative">
         <Header
           onOpenCart={() => setIsCartOpen(true)}
@@ -154,6 +134,8 @@ export default function Home() {
           onToggleMegaMenu={() => setIsMegaMenuOpen(!isMegaMenuOpen)}
           isMegaMenuOpen={isMegaMenuOpen}
           onOpenTrackOrder={() => setIsTrackOrderOpen(true)}
+          onOpenSearch={() => setIsSearchOpen(true)}
+          onOpenAuth={() => setIsAuthOpen(true)}
         />
 
         {/* Mega Menu Dropdown */}
@@ -192,17 +174,6 @@ export default function Home() {
       <WhatsAppWidget />
 
       {/* 6. Modals & Drawers */}
-      <ProductQuickView
-        slide={selectedSlideProduct}
-        onClose={() => setSelectedSlideProduct(null)}
-        onAddToCart={handleAddToCartFromQuickView}
-        isWishlisted={activeQuickViewProduct ? isProductWishlisted(activeQuickViewProduct.id) : false}
-        onToggleWishlist={() => {
-          if (activeQuickViewProduct) {
-            toggleWishlist(activeQuickViewProduct);
-          }
-        }}
-      />
 
       <WishlistDrawer
         isOpen={isWishlistOpen}
@@ -219,7 +190,9 @@ export default function Home() {
         cartItems={cartItems}
         onRemoveItem={removeCartItem}
         onUpdateQuantity={updateCartQuantity}
+        onClearCart={clearCart}
       />
+
 
       <SearchModal
         isOpen={isSearchOpen}

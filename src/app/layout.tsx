@@ -2,7 +2,15 @@ import type { Metadata } from 'next';
 import { Plus_Jakarta_Sans, Tenor_Sans, Italiana } from 'next/font/google';
 import { AppProviders } from '@/providers';
 import { SITE_CONFIG } from '@/constants/siteConfig';
+import type { Viewport } from 'next';
 import './globals.css';
+
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  maximumScale: 5,
+  themeColor: '#FAF8F5',
+};
 
 const plusJakartaSans = Plus_Jakarta_Sans({
   subsets: ['latin'],

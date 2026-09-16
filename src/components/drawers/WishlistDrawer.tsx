@@ -145,7 +145,7 @@ export const WishlistDrawer: React.FC<WishlistDrawerProps> = ({
                           onClose();
                         }}
                         className="py-2 px-2.5 rounded-lg border border-[#D6CBB8] text-[#55473B] hover:bg-white text-[11px] font-semibold transition-colors cursor-pointer"
-                        title="Quick View"
+                        title="View Details"
                       >
                         View
                       </button>

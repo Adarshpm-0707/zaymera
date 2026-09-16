@@ -1,7 +1,7 @@
 'use client';
 
-import AddNewProductPage from '../new/page';
+import { ProductEditor } from '@/components/admin/ProductEditor';
 
 export default function EditProductPage() {
-  return <AddNewProductPage />;
+  return <ProductEditor />;
 }

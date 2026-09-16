@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, Suspense } from 'react';
 import Link from 'next/link';
-import { useSearchParams } from 'next/navigation';
+import { useSearchParams, useRouter } from 'next/navigation';
 import {
   Sparkles,
   Filter,
@@ -19,7 +19,6 @@ import {
 } from 'lucide-react';
 import { fetchProducts, getInitialProducts, getLocalProducts, fetchCategories } from '@/lib/supabase/services';
 import { ProductItem, SlideData } from '@/types';
-import { TopBar } from '@/components/layout/TopBar';
 import { Header } from '@/components/layout/Header';
 import { CategoryMegaMenu } from '@/components/layout/CategoryMegaMenu';
 import { ProductQuickView } from '@/components/modals/ProductQuickView';
@@ -30,6 +29,7 @@ import { ContactModal } from '@/components/modals/ContactModal';
 import { CartDrawer } from '@/components/drawers/CartDrawer';
 import { WishlistDrawer } from '@/components/drawers/WishlistDrawer';
 import { WhatsAppWidget } from '@/components/widgets/WhatsAppWidget';
+import { Footer } from '@/components/layout/Footer';
 import { useCart } from '@/hooks/useCart';
 import { useWishlist } from '@/hooks/useWishlist';
 
@@ -85,8 +85,10 @@ function ProductsContent() {
     addToCart,
     addCustomToCart,
     removeCartItem,
-    updateCartQuantity
+    updateCartQuantity,
+    clearCart
   } = useCart();
+
 
   const {
     wishlistItems,
@@ -127,34 +129,11 @@ function ProductsContent() {
     loadAllProducts();
   }, []);
 
-  const handleAddToCartFromQuickView = (productName: string, priceStr: string, size: string) => {
-    addCustomToCart(productName, priceStr, size, selectedSlideProduct?.image);
-    setIsCartOpen(true);
-  };
+  const router = useRouter();
 
   const handleSelectProductForView = (product: ProductItem) => {
-    const slideAdapted: SlideData = {
-      id: 999,
-      tag: product.tag,
-      headlineStart: product.name,
-      headlineItalic: 'Artisan Collection',
-      description: product.description,
-      primaryCta: 'Shop Piece',
-      primaryHref: '#',
-      image: product.image,
-      theme: 'dark-gold',
-      productName: product.name,
-      productPrice: `₹${product.price.toLocaleString()}`,
-      productSlug: product.id,
-      badge: product.fabric,
-      accent: product.work
-    };
-    setSelectedSlideProduct(slideAdapted);
+    router.push(`/products/detail?id=${encodeURIComponent(product.id)}`);
   };
-
-  const activeQuickViewProduct = selectedSlideProduct
-    ? products.find(p => p.id === selectedSlideProduct.productSlug || p.name === selectedSlideProduct.productName)
-    : null;
 
   // Filter & Sort Logic
   const filteredProducts = products.filter(p => {
@@ -179,18 +158,7 @@ function ProductsContent() {
   return (
     <div className="min-h-screen flex flex-col bg-[#FAF8F5] text-[#221C18] font-sans-clean">
       
-      {/* 1. Top Utility Bar */}
-      <TopBar
-        onOpenSearch={() => setIsSearchOpen(true)}
-        onOpenCart={() => setIsCartOpen(true)}
-        onOpenWishlist={() => setIsWishlistOpen(true)}
-        onOpenAuth={() => setIsAuthOpen(true)}
-        onOpenContact={() => setIsContactOpen(true)}
-        cartCount={totalCartCount}
-        wishlistCount={wishlistCount}
-      />
-
-      {/* 2. Main Header */}
+      {/* Main Header */}
       <div className="relative">
         <Header
           onOpenCart={() => setIsCartOpen(true)}
@@ -201,6 +169,8 @@ function ProductsContent() {
           onToggleMegaMenu={() => setIsMegaMenuOpen(!isMegaMenuOpen)}
           isMegaMenuOpen={isMegaMenuOpen}
           onOpenTrackOrder={() => setIsTrackOrderOpen(true)}
+          onOpenSearch={() => setIsSearchOpen(true)}
+          onOpenAuth={() => setIsAuthOpen(true)}
         />
 
         <CategoryMegaMenu
@@ -396,21 +366,13 @@ function ProductsContent() {
 
       </main>
 
-      {/* 5. Floating WhatsApp Concierge */}
+      {/* 5. Editorial Footer with Contact & WhatsApp Concierge */}
+      <Footer />
+
+      {/* 6. Floating WhatsApp Concierge */}
       <WhatsAppWidget />
 
       {/* 6. Modals & Drawers */}
-      <ProductQuickView
-        slide={selectedSlideProduct}
-        onClose={() => setSelectedSlideProduct(null)}
-        onAddToCart={handleAddToCartFromQuickView}
-        isWishlisted={activeQuickViewProduct ? isProductWishlisted(activeQuickViewProduct.id) : false}
-        onToggleWishlist={() => {
-          if (activeQuickViewProduct) {
-            toggleWishlist(activeQuickViewProduct);
-          }
-        }}
-      />
 
       <WishlistDrawer
         isOpen={isWishlistOpen}
@@ -430,7 +392,9 @@ function ProductsContent() {
         cartItems={cartItems}
         onRemoveItem={removeCartItem}
         onUpdateQuantity={updateCartQuantity}
+        onClearCart={clearCart}
       />
+
 
       <SearchModal
         isOpen={isSearchOpen}
@@ -536,7 +500,7 @@ const ProductCatalogCard: React.FC<{
               className="pointer-events-auto p-2 rounded-full bg-white/95 text-[#221C18] hover:bg-[#9B2242] hover:text-white shadow-lg transition-transform transform hover:scale-110 active:scale-95 cursor-pointer flex items-center gap-1.5 text-xs font-semibold px-4"
             >
               <Eye className="w-3.5 h-3.5" />
-              <span>Quick View</span>
+              <span>View Details</span>
             </button>
           </div>
         </div>

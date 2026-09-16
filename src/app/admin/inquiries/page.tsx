@@ -74,24 +74,24 @@ export default function AdminInquiriesPage() {
       
       {/* Toast Notification */}
       {toastMessage && (
-        <div className="fixed bottom-20 lg:bottom-6 right-4 sm:right-6 z-50 bg-[#162E19] border border-[#22C55E] text-[#4ADE80] px-4 py-3 rounded-2xl shadow-2xl flex items-center gap-2.5 text-xs font-semibold animate-in slide-in-from-bottom-3 duration-200">
-          <CheckCircle2 className="w-4 h-4 text-[#22C55E]" />
+        <div className="fixed bottom-20 lg:bottom-6 right-4 sm:right-6 z-50 bg-[#ECFDF5] border border-[#86EFAC] text-[#15803D] px-4 py-3 rounded-2xl shadow-xl flex items-center gap-2.5 text-xs font-semibold animate-in slide-in-from-bottom-3 duration-200">
+          <CheckCircle2 className="w-4 h-4 text-[#16A34A]" />
           <span>{toastMessage}</span>
         </div>
       )}
 
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 pb-4 border-b border-[#26201B]">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 pb-4 border-b border-[#EAE2D5]">
         <div>
           <div className="flex items-center gap-2">
-            <h1 className="font-display text-xl sm:text-2xl lg:text-3xl font-normal text-[#FAF8F5] tracking-wide">
+            <h1 className="font-display text-xl sm:text-2xl lg:text-3xl font-normal text-[#1C1613] tracking-wide">
               Bespoke Concierge & Inquiries
             </h1>
-            <span className="text-[11px] sm:text-xs bg-[#291F18] border border-[#3E3025] text-[#E2B755] px-2.5 py-0.5 rounded-full font-bold">
+            <span className="text-[11px] sm:text-xs bg-[#FAF7F2] border border-[#EAE2D5] text-[#936718] px-2.5 py-0.5 rounded-full font-bold">
               {inquiries.length} Inquiries
             </span>
           </div>
-          <p className="text-[11px] sm:text-xs text-[#8C7B6C] mt-1 font-normal">
+          <p className="text-[11px] sm:text-xs text-[#6B5E52] mt-1 font-normal">
             Manage custom fitting inquiries, bridal customization requests, and customer messages.
           </p>
         </div>
@@ -99,7 +99,7 @@ export default function AdminInquiriesPage() {
         <button
           onClick={loadInquiries}
           disabled={loading}
-          className="p-2 sm:p-2.5 rounded-xl bg-[#201915] hover:bg-[#2C221D] border border-[#362A21] text-[#A89887] hover:text-white transition-colors cursor-pointer self-start sm:self-auto"
+          className="p-2 sm:p-2.5 rounded-xl bg-[#FAF7F2] hover:bg-[#F3ECE1] border border-[#EAE2D5] text-[#6B5E52] hover:text-[#1C1613] transition-colors cursor-pointer self-start sm:self-auto"
           title="Refresh Inquiries"
         >
           <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
@@ -109,13 +109,13 @@ export default function AdminInquiriesPage() {
       {/* Filters */}
       <div className="flex flex-col sm:flex-row gap-2.5 sm:gap-3">
         <div className="relative flex-1">
-          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[#7A6959]" />
+          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[#8A7B6E]" />
           <input
             type="text"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             placeholder="Search by client name, email, phone, custom request details..."
-            className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-[#171210] border border-[#2D231C] text-xs text-[#FAF8F5] placeholder-[#7A6959] focus:outline-none focus:border-[#C5A059]"
+            className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-white border border-[#EAE2D5] text-xs text-[#1C1613] placeholder-[#8A7B6E] focus:outline-none focus:border-[#936718] shadow-xs"
           />
         </div>
 
@@ -126,8 +126,8 @@ export default function AdminInquiriesPage() {
               onClick={() => setStatusFilter(st)}
               className={`px-3 py-2 rounded-xl text-xs font-semibold capitalize tracking-wide transition-all whitespace-nowrap cursor-pointer ${
                 statusFilter === st
-                  ? 'bg-[#C5A059] text-black shadow-md'
-                  : 'bg-[#1C1613] text-[#A89887] hover:text-white border border-[#2B221B]'
+                  ? 'bg-[#1C1613] text-white shadow-xs'
+                  : 'bg-white text-[#6B5E52] hover:text-[#1C1613] border border-[#EAE2D5]'
               }`}
             >
               {st}
@@ -155,69 +155,69 @@ export default function AdminInquiriesPage() {
           return (
             <div
               key={inq.id}
-              className="p-4 sm:p-5 rounded-3xl bg-[#14100E] border border-[#26201B] shadow-xl hover:border-[#3A2F27] transition-all flex flex-col justify-between space-y-3.5 sm:space-y-4"
+              className="p-4 sm:p-5 rounded-3xl bg-white border border-[#EAE2D5] shadow-xs hover:border-[#C5A059]/40 hover:shadow-md transition-all flex flex-col justify-between space-y-3.5 sm:space-y-4"
             >
               <div className="space-y-2.5 sm:space-y-3">
                 {/* Card Header */}
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <div className="flex items-center gap-2">
-                      <h3 className="font-semibold text-xs sm:text-sm text-[#FAF8F5]">
+                      <h3 className="font-semibold text-xs sm:text-sm text-[#1C1613]">
                         {inq.name}
                       </h3>
                       <span className={`text-[9px] sm:text-[9.5px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full ${
                         inq.status === 'new'
-                          ? 'bg-[#3B1414] text-[#F87171] border border-[#EF4444]/40'
+                          ? 'bg-[#FEF2F2] text-[#DC2626] border border-[#FECACA]'
                           : inq.status === 'contacted'
-                          ? 'bg-[#2E2413] text-[#F59E0B] border border-[#F59E0B]/40'
-                          : 'bg-[#132E1B] text-[#4ADE80] border border-[#22C55E]/40'
+                          ? 'bg-[#FEF9EE] text-[#B45309] border border-[#FDE68A]'
+                          : 'bg-[#ECFDF5] text-[#15803D] border border-[#86EFAC]'
                       }`}>
                         {inq.status}
                       </span>
                     </div>
 
-                    <div className="text-[10.5px] sm:text-[11px] text-[#C5A059] font-medium mt-0.5 flex items-center gap-1.5">
+                    <div className="text-[10.5px] sm:text-[11px] text-[#936718] font-medium mt-0.5 flex items-center gap-1.5">
                       <Sparkles className="w-3 h-3" />
                       <span>{inq.service_type || 'General Couture Inquiry'}</span>
                     </div>
                   </div>
 
-                  <div className="text-[9.5px] sm:text-[10px] text-[#7A6959] flex items-center gap-1">
+                  <div className="text-[9.5px] sm:text-[10px] text-[#8A7B6E] flex items-center gap-1">
                     <Calendar className="w-3 h-3" />
                     <span>{formattedDate}</span>
                   </div>
                 </div>
 
                 {/* Client Contact Info */}
-                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-[#A89887]">
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-[#6B5E52]">
                   {inq.email && (
-                    <a href={`mailto:${inq.email}`} className="flex items-center gap-1 hover:text-white transition-colors">
-                      <Mail className="w-3 h-3 text-[#7A6959]" />
+                    <a href={`mailto:${inq.email}`} className="flex items-center gap-1 hover:text-[#1C1613] transition-colors">
+                      <Mail className="w-3 h-3 text-[#8A7B6E]" />
                       <span className="truncate max-w-[160px] sm:max-w-none">{inq.email}</span>
                     </a>
                   )}
                   {inq.phone && (
-                    <a href={`tel:${inq.phone}`} className="flex items-center gap-1 hover:text-white transition-colors">
-                      <Phone className="w-3 h-3 text-[#7A6959]" />
+                    <a href={`tel:${inq.phone}`} className="flex items-center gap-1 hover:text-[#1C1613] transition-colors">
+                      <Phone className="w-3 h-3 text-[#8A7B6E]" />
                       <span>{inq.phone}</span>
                     </a>
                   )}
                 </div>
 
                 {/* Message Body */}
-                <div className="p-3 sm:p-3.5 rounded-2xl bg-[#1C1613] border border-[#2B211B] text-xs text-[#E6D7C8] leading-relaxed">
+                <div className="p-3 sm:p-3.5 rounded-2xl bg-[#FAF8F5] border border-[#EAE2D5] text-xs text-[#1C1613] leading-relaxed">
                   {inq.message}
                 </div>
               </div>
 
               {/* Bottom Actions */}
-              <div className="pt-2 border-t border-[#261F1A] flex items-center justify-between gap-2.5 flex-wrap">
+              <div className="pt-2.5 border-t border-[#EAE2D5] flex items-center justify-between gap-2.5 flex-wrap">
                 <div className="flex items-center gap-2">
-                  <span className="text-[10px] text-[#8C7B6C] uppercase font-bold">Status:</span>
+                  <span className="text-[10px] text-[#6B5E52] uppercase font-bold">Status:</span>
                   <select
                     value={inq.status}
                     onChange={(e) => handleStatusChange(inq.id, e.target.value)}
-                    className="px-2.5 py-1 rounded-lg bg-[#201814] border border-[#362A21] text-[10px] font-bold uppercase text-[#FAF8F5] cursor-pointer focus:outline-none"
+                    className="px-3 py-1.5 rounded-xl bg-[#FAF7F2] border border-[#EAE2D5] text-[10.5px] font-bold uppercase text-[#1C1613] cursor-pointer focus:outline-none min-h-[36px]"
                   >
                     <option value="new">New</option>
                     <option value="contacted">Contacted</option>
@@ -230,7 +230,7 @@ export default function AdminInquiriesPage() {
                     href={waUrl}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1.5 px-3 sm:px-3.5 py-1.5 rounded-full bg-[#25D366] hover:bg-[#20BE5C] text-white text-xs font-bold transition-all shadow-md active:scale-95 ml-auto sm:ml-0"
+                    className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-[#25D366] hover:bg-[#20BE5C] text-white text-xs font-bold transition-all shadow-sm active:scale-95 ml-auto sm:ml-0 min-h-[36px]"
                   >
                     <WhatsAppIcon className="w-3.5 h-3.5 text-white" />
                     <span>WhatsApp</span>
@@ -243,8 +243,8 @@ export default function AdminInquiriesPage() {
         })}
 
         {filteredInquiries.length === 0 && !loading && (
-          <div className="col-span-full py-12 text-center text-[#8C7B6C] bg-[#14100E] rounded-3xl border border-[#26201B]">
-            <MessageSquare className="w-10 h-10 mx-auto mb-2 text-[#4A3C32]" />
+          <div className="col-span-full py-12 text-center text-[#6B5E52] bg-white rounded-3xl border border-[#EAE2D5] shadow-xs">
+            <MessageSquare className="w-10 h-10 mx-auto mb-2 text-[#C5A059]" />
             <p className="text-sm font-medium">No inquiries found matching your filters.</p>
           </div>
         )}

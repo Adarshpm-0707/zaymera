@@ -20,10 +20,10 @@ export const CategoryMegaMenu: React.FC<CategoryMegaMenuProps> = ({
 
   return (
     <div 
-      className="absolute top-full left-0 w-full bg-white/98 backdrop-blur-md border-b border-[#E8DFC8] shadow-2xl z-30 transition-all animate-in slide-in-from-top-2 duration-200"
+      className="absolute top-full left-0 w-full bg-white/98 backdrop-blur-md border-b border-[#E8DFC8] shadow-2xl z-30 transition-all animate-in slide-in-from-top-2 duration-200 max-h-[calc(100vh-4.5rem)] sm:max-h-[calc(100vh-5rem)] overflow-y-auto"
       onMouseLeave={onClose}
     >
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-10">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 lg:py-10">
         
         {/* Header inside Mega Menu */}
         <div className="flex items-center justify-between pb-6 mb-6 border-b border-[#F0EAE1]">

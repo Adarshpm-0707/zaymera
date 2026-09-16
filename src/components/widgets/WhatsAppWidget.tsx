@@ -18,7 +18,7 @@ export const WhatsAppWidget: React.FC = () => {
   ];
 
   const handleSendWhatsApp = (text: string) => {
-    const rawPhone = SITE_CONFIG.conciergePhone.replace(/[^0-9]/g, '') || "919876543210";
+    const rawPhone = SITE_CONFIG.conciergePhone.replace(/[^0-9]/g, '') || "917306115950";
     const encodedText = encodeURIComponent(text || "Hello Zaymera Boutique Team, I'd like to ask a question.");
     const url = `https://wa.me/${rawPhone}?text=${encodedText}`;
     window.open(url, '_blank');
@@ -50,7 +50,7 @@ export const WhatsAppWidget: React.FC = () => {
                   <h4 className="font-semibold text-sm leading-tight">Zaymera Atelier WhatsApp</h4>
                   <p className="text-[11px] text-emerald-100 flex items-center gap-1">
                     <span className="w-1.5 h-1.5 rounded-full bg-emerald-300 animate-pulse"></span>
-                    Online &bull; Instant Stylist Assistance
+                    {SITE_CONFIG.conciergePhone} &bull; Online Stylist
                   </p>
                 </div>
               </div>
@@ -72,7 +72,7 @@ export const WhatsAppWidget: React.FC = () => {
                 Namaste! Welcome to Zaymera Haute Couture. 🌸
               </p>
               <p className="text-[#665749] text-[11px] leading-relaxed">
-                Connect directly with our master stylists on WhatsApp for custom measurements, bridal inquiries, or order updates.
+                Connect directly with our master stylists on WhatsApp ({SITE_CONFIG.conciergePhone}) for custom measurements, bridal inquiries, or order updates.
               </p>
             </div>
 
@@ -82,7 +82,7 @@ export const WhatsAppWidget: React.FC = () => {
               className="w-full flex items-center justify-center gap-2 py-2.5 px-4 bg-[#25D366] hover:bg-[#20BE5C] text-white rounded-xl font-bold text-xs uppercase tracking-wider shadow-md transition-all active:scale-[0.98] cursor-pointer"
             >
               <WhatsAppIcon className="w-4 h-4 text-white" />
-              <span>Direct WhatsApp Chat</span>
+              <span>Chat on WhatsApp ({SITE_CONFIG.conciergePhone})</span>
             </button>
 
             {/* Predefined Quick Questions */}

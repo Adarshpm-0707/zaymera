@@ -174,13 +174,13 @@ export const ContactModal: React.FC<ContactModalProps> = ({ isOpen, onClose }) =
             </div>
 
             <a
-              href={`https://wa.me/${SITE_CONFIG.conciergePhone.replace(/[^0-9]/g, '') || '919876543210'}?text=${encodeURIComponent('Hello Zaymera Atelier Stylist, I would like to inquire about couture designs.')}`}
+              href={`https://wa.me/${SITE_CONFIG.conciergePhone.replace(/[^0-9]/g, '') || '917306115950'}?text=${encodeURIComponent('Hello Zaymera Atelier Stylist, I would like to inquire about couture designs.')}`}
               target="_blank"
               rel="noopener noreferrer"
               className="w-full py-3 rounded-xl bg-[#25D366] hover:bg-[#20BE5C] text-white text-xs font-bold uppercase tracking-wider transition-all shadow-md active:scale-95 flex items-center justify-center gap-2"
             >
               <WhatsAppIcon className="w-4 h-4 text-white" />
-              <span>Chat Directly on WhatsApp</span>
+              <span>Chat on WhatsApp ({SITE_CONFIG.conciergePhone})</span>
             </a>
           </form>
         )}
@@ -188,7 +188,12 @@ export const ContactModal: React.FC<ContactModalProps> = ({ isOpen, onClose }) =
         <div className="mt-6 pt-4 border-t border-[#F0EAE1] grid grid-cols-2 gap-3 text-[11px] text-[#7A6C5F]">
           <div className="flex items-center gap-2">
             <Phone className="w-4 h-4 text-[#9B2242]" />
-            <span>{SITE_CONFIG.conciergePhone}</span>
+            <a
+              href={`tel:${SITE_CONFIG.conciergePhone.replace(/[^0-9+]/g, '')}`}
+              className="font-medium hover:text-[#9B2242] transition-colors"
+            >
+              {SITE_CONFIG.conciergePhone}
+            </a>
           </div>
           <div className="flex items-center gap-2">
             <Clock className="w-4 h-4 text-[#9B2242]" />

@@ -6,6 +6,8 @@ import { motion, type Variants } from 'motion/react';
 import { Sparkles, ArrowRight, ShieldCheck, Scissors, Truck, Award, Eye, ShoppingCart, Check, Heart } from 'lucide-react';
 import { WhatsAppIcon } from '@/components/icons/WhatsAppIcon';
 import { PRODUCTS_CATALOG, CATEGORY_TILES, circleLogoImg } from '@/constants/catalog';
+import { SITE_CONFIG } from '@/constants/siteConfig';
+import { Footer } from '@/components/layout/Footer';
 import { ProductItem } from '@/types';
 
 interface StoreExperienceSectionProps {
@@ -139,7 +141,7 @@ const ProductCard: React.FC<{
               aria-label="Quick View"
             >
               <Eye className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
-              <span className="hidden sm:inline">Quick View</span>
+              <span className="hidden sm:inline">View Details</span>
             </button>
           </div>
         </div>
@@ -520,13 +522,13 @@ export const StoreExperienceSection: React.FC<StoreExperienceSectionProps> = ({
             </p>
             <div className="flex flex-wrap items-center gap-3.5">
               <a
-                href="https://wa.me/919876543210?text=Hi%20Zaymera%20Team%2C%20I%20would%20like%20to%20inquire%20about%20a%20custom%20order%20and%20sizing."
+                href={`https://wa.me/${SITE_CONFIG.conciergePhone.replace(/[^0-9]/g, '') || '917306115950'}?text=${encodeURIComponent('Hi Zaymera Team, I would like to inquire about a custom order and sizing.')}`}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="inline-flex items-center gap-2 bg-[#25D366] hover:bg-[#20BE5C] text-white font-jakarta text-xs font-semibold px-5 py-3 rounded-full transition-all duration-300 shadow-lg active:scale-95"
               >
                 <WhatsAppIcon className="w-4 h-4 text-white" />
-                <span>Chat on WhatsApp</span>
+                <span>Chat on WhatsApp ({SITE_CONFIG.conciergePhone})</span>
               </a>
               <Link
                 href="/products"
@@ -541,54 +543,8 @@ export const StoreExperienceSection: React.FC<StoreExperienceSectionProps> = ({
         </motion.div>
       </section>
 
-      {/* 5. Editorial Footer */}
-      <motion.footer 
-        className="border-t border-[#E8DFCE] bg-[#FAF8F5] text-[#554D46] py-10 sm:py-12 text-xs font-jakarta"
-        initial={{ opacity: 0, y: 12 }}
-        whileInView={{ opacity: 1, y: 0 }}
-        viewport={{ once: true, amount: 0.2 }}
-        transition={{ duration: 0.5 }}
-      >
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col items-center text-center space-y-4 sm:space-y-5">
-          <div className="flex flex-col sm:flex-row items-center gap-2 sm:gap-3">
-            <div className="flex items-center gap-2.5">
-              <div className="w-7 h-7 rounded-full p-0.5 bg-gradient-to-tr from-[#C5A059] to-[#9B2242] shrink-0 shadow-sm overflow-hidden" style={{ width: '28px', height: '28px' }}>
-                <img
-                  src={circleLogoImg}
-                  alt="Zaymera"
-                  width={28}
-                  height={28}
-                  className="w-full h-full object-cover rounded-full bg-[#FAF7F2]"
-                  style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                />
-              </div>
-              <span className="font-tenor text-base sm:text-lg tracking-[0.25em] text-[#1C1613] font-medium">
-                ZAYMERA
-              </span>
-            </div>
-            <span className="hidden sm:inline text-[#C5A059] text-xs">✦</span>
-            <span className="text-[9.5px] sm:text-[10.5px] text-[#7A6C5F] tracking-[0.22em] uppercase font-medium">
-              Clothing That Speak Elegance
-            </span>
-          </div>
-
-          <nav className="flex flex-wrap items-center justify-center gap-x-4 sm:gap-x-6 gap-y-1.5 text-[11px] sm:text-xs text-[#6B5E52] font-medium tracking-wide">
-            <span className="hover:text-[#9B2242] transition-colors cursor-pointer">Terms & Conditions</span>
-            <span className="text-[#D6CBB8] text-[9px]">•</span>
-            <span className="hover:text-[#9B2242] transition-colors cursor-pointer">Shipping & Customs</span>
-            <span className="text-[#D6CBB8] text-[9px]">•</span>
-            <span className="hover:text-[#9B2242] transition-colors cursor-pointer">Artisan Handloom Certificate</span>
-            <span className="text-[#D6CBB8] text-[9px]">•</span>
-            <span className="hover:text-[#9B2242] transition-colors cursor-pointer">Atelier Care Guide</span>
-          </nav>
-
-          <div className="w-full max-w-sm pt-3 border-t border-[#EFE8DC] flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2.5 text-[10px] sm:text-[10.5px] text-[#9E8E7D] tracking-wider">
-            <span>© {new Date().getFullYear()} ZAYMERA Haute Couture.</span>
-            <span className="hidden sm:inline text-[#D6CBB8]">|</span>
-            <span>All rights reserved.</span>
-          </div>
-        </div>
-      </motion.footer>
+      {/* 5. Editorial Footer with Contact & WhatsApp Concierge */}
+      <Footer />
 
     </div>
   );

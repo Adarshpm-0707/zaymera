@@ -83,7 +83,7 @@ export const SearchModal: React.FC<SearchModalProps> = ({
                           {product.name}
                         </h4>
                         <div className="text-[11px] text-[#7A6C5F] mt-0.5 flex items-center gap-2">
-                          <span className="font-bold text-[#9B2242]">₹{product.price}</span>
+                          <span className="font-bold text-[#9B2242]">₹{product.price.toLocaleString()}</span>
                           <span>•</span>
                           <span>{product.fabric}</span>
                         </div>

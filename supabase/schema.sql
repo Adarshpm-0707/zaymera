@@ -151,7 +151,7 @@ CREATE TABLE IF NOT EXISTS public.banners (
 CREATE TABLE IF NOT EXISTS public.store_settings (
   id                       TEXT    PRIMARY KEY DEFAULT 'global',
   announcement_text        TEXT    NOT NULL DEFAULT 'Complimentary Express Worldwide Delivery & Handloom Guarantee',
-  concierge_phone          TEXT    NOT NULL DEFAULT '+91 98765 43210',
+  concierge_phone          TEXT    NOT NULL DEFAULT '+91 73061 15950',
   support_email            TEXT    NOT NULL DEFAULT 'atelier@zaymera.com',
   free_shipping_threshold  NUMERIC NOT NULL DEFAULT 0,
   store_timings            TEXT    NOT NULL DEFAULT '10:00 AM – 9:00 PM IST',

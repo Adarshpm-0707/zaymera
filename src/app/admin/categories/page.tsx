@@ -120,31 +120,31 @@ export default function AdminCategoriesPage() {
       
       {/* Toast */}
       {toastMessage && (
-        <div className="fixed bottom-20 lg:bottom-6 right-4 sm:right-6 z-50 bg-[#162E19] border border-[#22C55E] text-[#4ADE80] px-4 py-3 rounded-2xl shadow-2xl flex items-center gap-2.5 text-xs font-semibold animate-in slide-in-from-bottom-3 duration-200">
-          <CheckCircle2 className="w-4 h-4 text-[#22C55E]" />
+        <div className="fixed bottom-20 lg:bottom-6 right-4 sm:right-6 z-50 bg-[#ECFDF5] border border-[#86EFAC] text-[#15803D] px-4 py-3 rounded-2xl shadow-xl flex items-center gap-2.5 text-xs font-semibold animate-in slide-in-from-bottom-3 duration-200">
+          <CheckCircle2 className="w-4 h-4 text-[#16A34A]" />
           <span>{toastMessage}</span>
         </div>
       )}
 
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 pb-4 border-b border-[#26201B]">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 pb-4 border-b border-[#EAE2D5]">
         <div>
           <div className="flex items-center gap-2">
-            <h1 className="font-display text-xl sm:text-2xl lg:text-3xl font-normal text-[#FAF8F5] tracking-wide">
+            <h1 className="font-display text-xl sm:text-2xl lg:text-3xl font-normal text-[#1C1613] tracking-wide">
               Categories & Collections
             </h1>
-            <span className="text-[11px] sm:text-xs bg-[#291F18] border border-[#3E3025] text-[#E2B755] px-2.5 py-0.5 rounded-full font-bold">
+            <span className="text-[11px] sm:text-xs bg-[#FAF7F2] border border-[#EAE2D5] text-[#936718] px-2.5 py-0.5 rounded-full font-bold">
               {categories.length} Collections
             </span>
           </div>
-          <p className="text-[11px] sm:text-xs text-[#8C7B6C] mt-1 font-normal">
+          <p className="text-[11px] sm:text-xs text-[#6B5E52] mt-1 font-normal">
             Organize atelier navigation, showcase category lookbook banners, and manage boutique catalog tags.
           </p>
         </div>
 
         <button
           onClick={() => setIsAddModalOpen(true)}
-          className="inline-flex items-center gap-1.5 sm:gap-2 bg-gradient-to-r from-[#C5A059] to-[#9B2242] hover:opacity-95 text-white text-xs font-bold px-4 py-2.5 rounded-xl transition-all shadow-lg active:scale-95 cursor-pointer self-start sm:self-auto"
+          className="inline-flex items-center gap-1.5 sm:gap-2 bg-gradient-to-r from-[#C5A059] to-[#9B2242] hover:opacity-95 text-white text-xs font-bold px-4 py-2.5 rounded-xl transition-all shadow-sm active:scale-95 cursor-pointer self-start sm:self-auto"
         >
           <PlusCircle className="w-4 h-4" />
           <span>Add Collection</span>
@@ -153,13 +153,13 @@ export default function AdminCategoriesPage() {
 
       {/* Search */}
       <div className="relative max-w-md">
-        <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[#7A6959]" />
+        <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[#8A7B6E]" />
         <input
           type="text"
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
           placeholder="Search collections..."
-          className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-[#171210] border border-[#2D231C] text-xs text-[#FAF8F5] placeholder-[#7A6959] focus:outline-none focus:border-[#C5A059]"
+          className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-white border border-[#EAE2D5] text-xs text-[#1C1613] placeholder-[#8A7B6E] focus:outline-none focus:border-[#936718] shadow-xs"
         />
       </div>
 
@@ -168,17 +168,17 @@ export default function AdminCategoriesPage() {
         {filteredCategories.map((cat) => (
           <div
             key={cat.id}
-            className="group rounded-3xl bg-[#14100E] border border-[#26201B] overflow-hidden shadow-xl hover:border-[#3E322A] transition-all flex flex-col justify-between"
+            className="group rounded-3xl bg-white border border-[#EAE2D5] overflow-hidden shadow-xs hover:border-[#C5A059]/50 hover:shadow-md transition-all flex flex-col justify-between"
           >
             <div>
               {/* Banner Image */}
-              <div className="relative h-44 sm:h-48 overflow-hidden bg-[#241B16]">
+              <div className="relative h-44 sm:h-48 overflow-hidden bg-[#FAF7F2]">
                 <img
                   src={cat.image}
                   alt={cat.title}
                   className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
                 />
-                <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/30 to-transparent flex flex-col justify-end p-4">
+                <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/30 to-transparent flex flex-col justify-end p-4">
                   <span className="text-[10px] font-bold uppercase tracking-widest text-[#E2B755]">
                     {cat.count}
                   </span>
@@ -196,11 +196,11 @@ export default function AdminCategoriesPage() {
 
               {/* Description */}
               <div className="p-4 space-y-2 text-xs">
-                <div className="text-[11px] font-mono text-[#A89887]">
-                  Slug: <span className="text-[#FAF8F5]">{cat.slug}</span>
+                <div className="text-[11px] font-mono text-[#6B5E52]">
+                  Slug: <span className="text-[#1C1613] font-semibold">{cat.slug}</span>
                 </div>
                 {cat.description && (
-                  <p className="text-[#8C7B6C] line-clamp-2 leading-relaxed text-[11.5px]">
+                  <p className="text-[#6B5E52] line-clamp-2 leading-relaxed text-[11.5px]">
                     {cat.description}
                   </p>
                 )}
@@ -208,11 +208,11 @@ export default function AdminCategoriesPage() {
             </div>
 
             {/* Bottom Actions */}
-            <div className="p-4 pt-2 border-t border-[#221B17] flex items-center justify-between">
+            <div className="p-4 pt-2 border-t border-[#EAE2D5] flex items-center justify-between">
               <Link
                 href={`/products`}
                 target="_blank"
-                className="inline-flex items-center gap-1 text-[11px] text-[#C5A059] hover:underline"
+                className="inline-flex items-center gap-1 text-[11px] text-[#936718] font-semibold hover:underline"
               >
                 <span>View on Store</span>
                 <ExternalLink className="w-3 h-3" />
@@ -221,7 +221,7 @@ export default function AdminCategoriesPage() {
               <div className="flex items-center gap-1.5">
                 <button
                   onClick={() => setEditingCategory({ ...cat })}
-                  className="p-2 rounded-xl bg-[#201814] text-[#C5A059] hover:text-white transition-colors cursor-pointer"
+                  className="p-2 rounded-xl bg-[#FAF7F2] border border-[#EAE2D5] text-[#936718] hover:bg-[#F3ECE1] transition-colors cursor-pointer"
                   title="Edit Category"
                 >
                   <Edit2 className="w-3.5 h-3.5" />
@@ -229,7 +229,7 @@ export default function AdminCategoriesPage() {
 
                 <button
                   onClick={() => handleDelete(cat.id)}
-                  className="p-2 rounded-xl bg-[#201814] text-[#EF4444] hover:bg-[#3D1A1A] transition-colors cursor-pointer"
+                  className="p-2 rounded-xl bg-[#FEF2F2] border border-[#FECACA] text-[#DC2626] hover:bg-[#FEE2E2] transition-colors cursor-pointer"
                   title="Delete Category"
                 >
                   <Trash2 className="w-3.5 h-3.5" />
@@ -243,25 +243,25 @@ export default function AdminCategoriesPage() {
 
       {/* Add Category Modal */}
       {isAddModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/85 backdrop-blur-md animate-in fade-in duration-200">
-          <div className="relative w-full max-w-lg bg-[#15110F] border border-[#3A2E25] rounded-3xl p-5 sm:p-8 shadow-2xl text-[#FAF8F5]">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="relative w-full max-w-lg max-h-[90vh] overflow-y-auto bg-white border border-[#EAE2D5] rounded-3xl p-5 sm:p-8 shadow-2xl text-[#1C1613]">
             <button
               onClick={() => setIsAddModalOpen(false)}
-              className="absolute top-4 right-4 sm:top-5 sm:right-5 p-2 rounded-full bg-[#201915] text-[#8C7B6C] hover:text-white cursor-pointer"
+              className="absolute top-4 right-4 sm:top-5 sm:right-5 p-2 rounded-full bg-[#FAF7F2] text-[#6B5E52] hover:text-[#1C1613] border border-[#EAE2D5] cursor-pointer"
             >
               <X className="w-5 h-5" />
             </button>
 
             <div className="flex items-center gap-2 mb-4 sm:mb-6">
-              <Sparkles className="w-4 h-4 text-[#C5A059]" />
-              <h2 className="font-display text-lg sm:text-xl text-[#FAF8F5] tracking-wide">
+              <Sparkles className="w-4 h-4 text-[#936718]" />
+              <h2 className="font-display text-lg sm:text-xl text-[#1C1613] tracking-wide font-normal">
                 Add New Collection
               </h2>
             </div>
 
             <form onSubmit={handleCreate} className="space-y-4">
               <div>
-                <label className="block text-xs font-semibold text-[#A89887] uppercase tracking-wider mb-1.5">
+                <label className="block text-xs font-semibold text-[#4A3E36] uppercase tracking-wider mb-1.5">
                   Collection Title *
                 </label>
                 <input
@@ -270,13 +270,13 @@ export default function AdminCategoriesPage() {
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
                   placeholder="e.g. Royal Organza Dupattas"
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-[#1C1613] border border-[#30251E] text-xs text-[#FAF8F5] focus:outline-none focus:border-[#C5A059]"
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-[#FAF8F5] border border-[#EAE2D5] text-xs text-[#1C1613] placeholder-[#8A7B6E] focus:outline-none focus:border-[#936718]"
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-semibold text-[#A89887] uppercase tracking-wider mb-1.5">
+                  <label className="block text-xs font-semibold text-[#4A3E36] uppercase tracking-wider mb-1.5">
                     URL Slug
                   </label>
                   <input
@@ -284,12 +284,12 @@ export default function AdminCategoriesPage() {
                     value={slug}
                     onChange={(e) => setSlug(e.target.value)}
                     placeholder="e.g. organza-dupattas"
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-[#1C1613] border border-[#30251E] text-xs text-[#FAF8F5] focus:outline-none focus:border-[#C5A059]"
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-[#FAF8F5] border border-[#EAE2D5] text-xs text-[#1C1613] placeholder-[#8A7B6E] focus:outline-none focus:border-[#936718]"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-[#A89887] uppercase tracking-wider mb-1.5">
+                  <label className="block text-xs font-semibold text-[#4A3E36] uppercase tracking-wider mb-1.5">
                     Item Count Tag
                   </label>
                   <input
@@ -297,13 +297,13 @@ export default function AdminCategoriesPage() {
                     value={count}
                     onChange={(e) => setCount(e.target.value)}
                     placeholder="e.g. 45+ Designs"
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-[#1C1613] border border-[#30251E] text-xs text-[#FAF8F5] focus:outline-none focus:border-[#C5A059]"
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-[#FAF8F5] border border-[#EAE2D5] text-xs text-[#1C1613] placeholder-[#8A7B6E] focus:outline-none focus:border-[#936718]"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-[#A89887] uppercase tracking-wider mb-1.5">
+                <label className="block text-xs font-semibold text-[#4A3E36] uppercase tracking-wider mb-1.5">
                   Banner Image URL *
                 </label>
                 <input
@@ -311,12 +311,12 @@ export default function AdminCategoriesPage() {
                   required
                   value={image}
                   onChange={(e) => setImage(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-[#1C1613] border border-[#30251E] text-xs text-[#FAF8F5] focus:outline-none focus:border-[#C5A059]"
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-[#FAF8F5] border border-[#EAE2D5] text-xs text-[#1C1613] placeholder-[#8A7B6E] focus:outline-none focus:border-[#936718]"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-[#A89887] uppercase tracking-wider mb-1.5">
+                <label className="block text-xs font-semibold text-[#4A3E36] uppercase tracking-wider mb-1.5">
                   Description
                 </label>
                 <textarea
@@ -324,7 +324,7 @@ export default function AdminCategoriesPage() {
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
                   placeholder="Collection aesthetic summary..."
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-[#1C1613] border border-[#30251E] text-xs text-[#FAF8F5] focus:outline-none focus:border-[#C5A059]"
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-[#FAF8F5] border border-[#EAE2D5] text-xs text-[#1C1613] placeholder-[#8A7B6E] focus:outline-none focus:border-[#936718]"
                 />
               </div>
 
@@ -334,24 +334,24 @@ export default function AdminCategoriesPage() {
                   id="feat"
                   checked={featured}
                   onChange={(e) => setFeatured(e.target.checked)}
-                  className="rounded text-[#C5A059]"
+                  className="rounded text-[#936718]"
                 />
-                <label htmlFor="feat" className="text-xs font-semibold text-[#FAF8F5] cursor-pointer">
+                <label htmlFor="feat" className="text-xs font-semibold text-[#1C1613] cursor-pointer">
                   Feature on Mega Menu & Home Catalog
                 </label>
               </div>
 
-              <div className="pt-4 flex items-center justify-end gap-3 border-t border-[#2A211B]">
+              <div className="pt-4 flex items-center justify-end gap-3 border-t border-[#EAE2D5]">
                 <button
                   type="button"
                   onClick={() => setIsAddModalOpen(false)}
-                  className="px-4 py-2.5 rounded-xl bg-[#201915] text-xs font-semibold text-[#A89887] hover:text-white"
+                  className="px-4 py-2.5 rounded-xl bg-[#FAF7F2] text-xs font-semibold text-[#6B5E52] hover:text-[#1C1613] border border-[#EAE2D5] cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-[#C5A059] to-[#9B2242] text-white text-xs font-bold"
+                  className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-[#C5A059] to-[#9B2242] text-white text-xs font-bold hover:opacity-95 shadow-sm cursor-pointer"
                 >
                   Create Collection
                 </button>
@@ -363,25 +363,25 @@ export default function AdminCategoriesPage() {
 
       {/* Edit Category Modal */}
       {editingCategory && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/85 backdrop-blur-md animate-in fade-in duration-200">
-          <div className="relative w-full max-w-lg bg-[#15110F] border border-[#3A2E25] rounded-3xl p-5 sm:p-8 shadow-2xl text-[#FAF8F5]">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="relative w-full max-w-lg max-h-[90vh] overflow-y-auto bg-white border border-[#EAE2D5] rounded-3xl p-5 sm:p-8 shadow-2xl text-[#1C1613]">
             <button
               onClick={() => setEditingCategory(null)}
-              className="absolute top-4 right-4 sm:top-5 sm:right-5 p-2 rounded-full bg-[#201915] text-[#8C7B6C] hover:text-white cursor-pointer"
+              className="absolute top-4 right-4 sm:top-5 sm:right-5 p-2 rounded-full bg-[#FAF7F2] text-[#6B5E52] hover:text-[#1C1613] border border-[#EAE2D5] cursor-pointer"
             >
               <X className="w-5 h-5" />
             </button>
 
             <div className="flex items-center gap-2 mb-4 sm:mb-6">
-              <Sparkles className="w-4 h-4 text-[#C5A059]" />
-              <h2 className="font-display text-lg sm:text-xl text-[#FAF8F5] tracking-wide">
+              <Sparkles className="w-4 h-4 text-[#936718]" />
+              <h2 className="font-display text-lg sm:text-xl text-[#1C1613] tracking-wide font-normal">
                 Edit Collection
               </h2>
             </div>
 
             <form onSubmit={handleUpdate} className="space-y-4">
               <div>
-                <label className="block text-xs font-semibold text-[#A89887] uppercase tracking-wider mb-1.5">
+                <label className="block text-xs font-semibold text-[#4A3E36] uppercase tracking-wider mb-1.5">
                   Collection Title *
                 </label>
                 <input
@@ -389,38 +389,38 @@ export default function AdminCategoriesPage() {
                   required
                   value={editingCategory.title}
                   onChange={(e) => setEditingCategory({ ...editingCategory, title: e.target.value })}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-[#1C1613] border border-[#30251E] text-xs text-[#FAF8F5] focus:outline-none focus:border-[#C5A059]"
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-[#FAF8F5] border border-[#EAE2D5] text-xs text-[#1C1613] placeholder-[#8A7B6E] focus:outline-none focus:border-[#936718]"
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-semibold text-[#A89887] uppercase tracking-wider mb-1.5">
+                  <label className="block text-xs font-semibold text-[#4A3E36] uppercase tracking-wider mb-1.5">
                     URL Slug
                   </label>
                   <input
                     type="text"
                     value={editingCategory.slug}
                     onChange={(e) => setEditingCategory({ ...editingCategory, slug: e.target.value })}
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-[#1C1613] border border-[#30251E] text-xs text-[#FAF8F5] focus:outline-none focus:border-[#C5A059]"
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-[#FAF8F5] border border-[#EAE2D5] text-xs text-[#1C1613] placeholder-[#8A7B6E] focus:outline-none focus:border-[#936718]"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-[#A89887] uppercase tracking-wider mb-1.5">
+                  <label className="block text-xs font-semibold text-[#4A3E36] uppercase tracking-wider mb-1.5">
                     Item Count Tag
                   </label>
                   <input
                     type="text"
                     value={editingCategory.count}
                     onChange={(e) => setEditingCategory({ ...editingCategory, count: e.target.value })}
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-[#1C1613] border border-[#30251E] text-xs text-[#FAF8F5] focus:outline-none focus:border-[#C5A059]"
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-[#FAF8F5] border border-[#EAE2D5] text-xs text-[#1C1613] placeholder-[#8A7B6E] focus:outline-none focus:border-[#936718]"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-[#A89887] uppercase tracking-wider mb-1.5">
+                <label className="block text-xs font-semibold text-[#4A3E36] uppercase tracking-wider mb-1.5">
                   Banner Image URL *
                 </label>
                 <input
@@ -428,19 +428,19 @@ export default function AdminCategoriesPage() {
                   required
                   value={editingCategory.image}
                   onChange={(e) => setEditingCategory({ ...editingCategory, image: e.target.value })}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-[#1C1613] border border-[#30251E] text-xs text-[#FAF8F5] focus:outline-none focus:border-[#C5A059]"
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-[#FAF8F5] border border-[#EAE2D5] text-xs text-[#1C1613] placeholder-[#8A7B6E] focus:outline-none focus:border-[#936718]"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-[#A89887] uppercase tracking-wider mb-1.5">
+                <label className="block text-xs font-semibold text-[#4A3E36] uppercase tracking-wider mb-1.5">
                   Description
                 </label>
                 <textarea
                   rows={2}
                   value={editingCategory.description || ''}
                   onChange={(e) => setEditingCategory({ ...editingCategory, description: e.target.value })}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-[#1C1613] border border-[#30251E] text-xs text-[#FAF8F5] focus:outline-none focus:border-[#C5A059]"
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-[#FAF8F5] border border-[#EAE2D5] text-xs text-[#1C1613] placeholder-[#8A7B6E] focus:outline-none focus:border-[#936718]"
                 />
               </div>
 
@@ -450,24 +450,24 @@ export default function AdminCategoriesPage() {
                   id="editFeat"
                   checked={editingCategory.featured ?? false}
                   onChange={(e) => setEditingCategory({ ...editingCategory, featured: e.target.checked })}
-                  className="rounded text-[#C5A059]"
+                  className="rounded text-[#936718]"
                 />
-                <label htmlFor="editFeat" className="text-xs font-semibold text-[#FAF8F5] cursor-pointer">
+                <label htmlFor="editFeat" className="text-xs font-semibold text-[#1C1613] cursor-pointer">
                   Feature on Mega Menu & Home Catalog
                 </label>
               </div>
 
-              <div className="pt-4 flex items-center justify-end gap-3 border-t border-[#2A211B]">
+              <div className="pt-4 flex items-center justify-end gap-3 border-t border-[#EAE2D5]">
                 <button
                   type="button"
                   onClick={() => setEditingCategory(null)}
-                  className="px-4 py-2.5 rounded-xl bg-[#201915] text-xs font-semibold text-[#A89887] hover:text-white"
+                  className="px-4 py-2.5 rounded-xl bg-[#FAF7F2] text-xs font-semibold text-[#6B5E52] hover:text-[#1C1613] border border-[#EAE2D5] cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-[#C5A059] to-[#9B2242] text-white text-xs font-bold"
+                  className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-[#C5A059] to-[#9B2242] text-white text-xs font-bold hover:opacity-95 shadow-sm cursor-pointer"
                 >
                   Save Changes
                 </button>

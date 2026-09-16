@@ -138,9 +138,10 @@ export const HeroMinimal: React.FC<HeroMinimalProps> = ({
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ duration: 0.8, delay: 0.6 }}
-            className="pt-4 flex items-center gap-4 text-xs text-[#E1D7CC]"
+            onClick={() => onShopNow(activeSlide)}
+            className="pt-4 inline-flex items-center gap-4 text-xs text-[#E1D7CC] cursor-pointer hover:text-white transition-colors"
           >
-            <span className="font-semibold text-white">{activeSlide.productName}</span>
+            <span className="font-semibold text-white underline underline-offset-4 decoration-white/40 hover:decoration-[#E6C280]">{activeSlide.productName}</span>
             <span className="w-1.5 h-1.5 rounded-full bg-[#E6C280]" />
             <span className="text-[#E6C280] font-bold text-sm">{activeSlide.productPrice}</span>
           </motion.div>

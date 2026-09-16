@@ -9,26 +9,21 @@ import {
   Lock,
   Eye,
   EyeOff,
-  ShieldCheck,
-  Sparkles,
-  ArrowRight,
   Store,
   CheckCircle2,
-  AlertCircle,
-  Briefcase
+  AlertCircle
 } from 'lucide-react';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase/client';
 import { circleLogoImg } from '@/constants/catalog';
 
 export default function AdminSignupPage() {
   const router = useRouter();
-  const [fullName, setFullName] = useState('');
+  const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [role, setRole] = useState('Atelier Store Director');
-  const [adminSecurityCode, setAdminSecurityCode] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
@@ -38,89 +33,125 @@ export default function AdminSignupPage() {
     setErrorMsg('');
     setSuccessMsg('');
 
-    if (!fullName.trim() || !email.trim() || !password.trim()) {
-      setErrorMsg('Please complete all required fields');
+    const cleanUsername = username.trim().toLowerCase().replace(/\s+/g, '_');
+    const cleanEmail = email.trim().toLowerCase();
+    const cleanPass = password.trim();
+    const cleanConfirmPass = confirmPassword.trim();
+
+    if (!cleanUsername || !cleanEmail || !cleanPass || !cleanConfirmPass) {
+      setErrorMsg('Please fill in all fields.');
       return;
     }
 
-    if (password !== confirmPassword) {
-      setErrorMsg('Passwords do not match. Please verify.');
+    if (cleanUsername.length < 3) {
+      setErrorMsg('Username must be at least 3 characters.');
       return;
     }
 
-    if (password.length < 6) {
-      setErrorMsg('Password must be at least 6 characters.');
+    if (cleanPass.length < 4) {
+      setErrorMsg('Password must be at least 4 characters.');
+      return;
+    }
+
+    if (cleanPass !== cleanConfirmPass) {
+      setErrorMsg('Passwords do not match. Please re-enter.');
       return;
     }
 
     setLoading(true);
 
     try {
-      if (isSupabaseConfigured) {
-        const { data, error } = await supabase.auth.signUp({
-          email: email.trim(),
-          password: password.trim(),
-          options: {
-            data: {
-              full_name: fullName.trim(),
-              role,
-            },
-          },
-        });
+      // 1. Save new admin to local registered admins list
+      if (typeof window !== 'undefined') {
+        let registeredList: any[] = [];
+        try {
+          const raw = localStorage.getItem('zaymera_registered_admins');
+          if (raw) registeredList = JSON.parse(raw) || [];
+        } catch {
+          registeredList = [];
+        }
 
-        if (error) {
-          // If Supabase fails, save local session for admin testing
-          saveAdminProfile();
-          setSuccessMsg('Executive account registered locally! Redirecting...');
-          setTimeout(() => router.push('/admin'), 1000);
+        // Check if username or email is already registered
+        const existing = registeredList.find(
+          (u) =>
+            u.username?.toLowerCase() === cleanUsername ||
+            u.email?.toLowerCase() === cleanEmail
+        );
+
+        if (existing) {
+          setErrorMsg('An account with this username or email already exists. Please login instead.');
+          setLoading(false);
           return;
         }
 
-        saveAdminProfile();
-        setSuccessMsg('Account created successfully! Entering Atelier suite...');
-        setTimeout(() => router.push('/admin'), 1000);
-      } else {
-        saveAdminProfile();
-        setSuccessMsg('Atelier executive profile registered! Redirecting...');
-        setTimeout(() => router.push('/admin'), 900);
+        const newAdmin = {
+          id: `adm_${Date.now()}`,
+          username: cleanUsername,
+          name: cleanUsername,
+          email: cleanEmail,
+          password: cleanPass,
+          role: 'Administrator',
+          createdAt: new Date().toISOString()
+        };
+
+        registeredList.push(newAdmin);
+        localStorage.setItem('zaymera_registered_admins', JSON.stringify(registeredList));
+
+        // Save active session
+        localStorage.setItem(
+          'zaymera_admin_auth',
+          JSON.stringify({
+            username: cleanUsername,
+            name: cleanUsername,
+            email: cleanEmail,
+            role: 'Administrator',
+            loggedInAt: new Date().toISOString()
+          })
+        );
       }
+
+      // 2. Also register in Supabase Auth if available
+      if (isSupabaseConfigured) {
+        try {
+          await supabase.auth.signUp({
+            email: cleanEmail,
+            password: cleanPass,
+            options: {
+              data: {
+                username: cleanUsername,
+                full_name: cleanUsername,
+                role: 'Administrator',
+              },
+            },
+          });
+        } catch {
+          // non-blocking
+        }
+      }
+
+      setSuccessMsg(`Admin account "${cleanUsername}" registered successfully! Entering Dashboard...`);
+      setTimeout(() => {
+        router.push('/admin');
+      }, 700);
     } catch (err: any) {
-      setErrorMsg(err.message || 'Failed to create admin profile. Please try again.');
+      setErrorMsg(err.message || 'Failed to register account. Please try again.');
     } finally {
       setLoading(false);
     }
   };
 
-  const saveAdminProfile = () => {
-    if (typeof window !== 'undefined') {
-      try {
-        localStorage.setItem(
-          'zaymera_admin_auth',
-          JSON.stringify({
-            name: fullName.trim(),
-            email: email.trim(),
-            role,
-            createdAt: new Date().toISOString()
-          })
-        );
-      } catch (e) {
-        console.error(e);
-      }
-    }
-  };
-
   return (
-    <div className="min-h-screen bg-[#0F0D0C] text-[#FAF8F5] flex flex-col justify-between items-center p-4 sm:p-6 lg:p-8 font-sans-clean relative overflow-hidden">
+    <div className="min-h-[100dvh] bg-[#FAF8F5] text-[#1C1613] flex flex-col justify-between items-center p-4 sm:p-6 lg:p-8 font-sans-clean relative overflow-hidden">
       
-      {/* Background Luxury Ambient Glows */}
+      {/* Ambient background glow accents */}
       <div className="absolute top-1/3 -right-32 w-96 h-96 bg-[#C5A059]/10 rounded-full blur-3xl pointer-events-none" />
-      <div className="absolute bottom-1/3 -left-32 w-96 h-96 bg-[#9B2242]/15 rounded-full blur-3xl pointer-events-none" />
+      <div className="absolute bottom-1/3 -left-32 w-96 h-96 bg-[#9B2242]/5 rounded-full blur-3xl pointer-events-none" />
 
       {/* Top Bar with Storefront Link */}
-      <header className="w-full max-w-5xl flex items-center justify-between z-10 py-2">
+      <header className="w-full max-w-md flex items-center justify-between z-10 py-2">
         <Link href="/" className="flex items-center gap-2.5 group">
           <div 
-            className="w-8 h-8 rounded-full p-0.5 bg-gradient-to-tr from-[#C5A059] to-[#9B2242] shrink-0 overflow-hidden shadow-md"
+            className="w-8 h-8 rounded-full p-0.5 bg-gradient-to-tr from-[#C5A059] to-[#9B2242] shrink-0 overflow-hidden shadow-sm"
             style={{ width: 32, height: 32, minWidth: 32, minHeight: 32 }}
           >
             <img
@@ -132,202 +163,168 @@ export default function AdminSignupPage() {
               style={{ width: '100%', height: '100%', objectFit: 'cover' }}
             />
           </div>
-          <span className="font-display text-base tracking-[0.22em] text-[#FAF8F5] group-hover:text-[#E2B755] transition-colors">
+          <span className="font-display text-base tracking-[0.22em] text-[#1C1613] group-hover:text-[#936718] transition-colors">
             ZAYMERA
           </span>
         </Link>
 
         <Link
           href="/"
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[#1C1613] hover:bg-[#2A211B] border border-[#33271F] text-xs text-[#C5A059] hover:text-white transition-colors"
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white hover:bg-[#FAF7F2] border border-[#EAE2D5] text-xs text-[#936718] hover:text-[#1C1613] transition-colors shadow-xs"
         >
           <Store className="w-3.5 h-3.5" />
-          <span className="hidden sm:inline">Storefront</span>
+          <span>Store</span>
         </Link>
       </header>
 
       {/* Main Signup Card */}
-      <main className="w-full max-w-lg my-auto z-10 py-6">
-        <div className="rounded-3xl bg-[#14100E] border border-[#2D231C] p-6 sm:p-8 shadow-2xl space-y-5 relative backdrop-blur-xl">
+      <main className="w-full max-w-md my-auto z-10 py-4 sm:py-6">
+        <div className="rounded-3xl bg-white border border-[#EAE2D5] p-6 sm:p-8 shadow-xl space-y-5 relative">
           
           {/* Header Title */}
           <div className="text-center space-y-1.5">
-            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#201814] border border-[#3E3025] text-[10px] font-bold uppercase tracking-widest text-[#E2B755] mb-1">
-              <Sparkles className="w-3.5 h-3.5 text-[#E2B755]" />
-              <span>Haute Couture Personnel Registry</span>
-            </div>
-            
-            <h1 className="font-display text-2xl sm:text-3xl text-[#FAF8F5] tracking-wide">
-              Admin Registration
+            <h1 className="font-display text-2xl sm:text-3xl text-[#1C1613] tracking-wide font-normal">
+              Admin Register
             </h1>
-            
-            <p className="text-xs text-[#8C7B6C] max-w-sm mx-auto">
-              Create a verified management profile to access the boutique suite.
+            <p className="text-xs text-[#6B5E52]">
+              Create an administrator account
             </p>
           </div>
 
           {/* Feedback Messages */}
           {errorMsg && (
-            <div className="p-3.5 rounded-xl bg-[#2D1616] border border-[#EF4444]/40 text-[#FCA5A5] text-xs flex items-center gap-2.5 animate-in fade-in">
-              <AlertCircle className="w-4 h-4 shrink-0 text-[#EF4444]" />
+            <div className="p-3.5 rounded-xl bg-[#FEF2F2] border border-[#FECACA] text-[#DC2626] text-xs flex items-center gap-2.5 animate-in fade-in">
+              <AlertCircle className="w-4 h-4 shrink-0 text-[#DC2626]" />
               <span>{errorMsg}</span>
             </div>
           )}
 
           {successMsg && (
-            <div className="p-3.5 rounded-xl bg-[#142E18] border border-[#22C55E]/40 text-[#86EFAC] text-xs flex items-center gap-2.5 animate-in fade-in">
-              <CheckCircle2 className="w-4 h-4 shrink-0 text-[#22C55E]" />
+            <div className="p-3.5 rounded-xl bg-[#ECFDF5] border border-[#86EFAC] text-[#15803D] text-xs flex items-center gap-2.5 animate-in fade-in">
+              <CheckCircle2 className="w-4 h-4 shrink-0 text-[#16A34A]" />
               <span>{successMsg}</span>
             </div>
           )}
 
-          {/* Signup Form */}
-          <form onSubmit={handleSignup} className="space-y-3.5">
+          {/* Signup Form: ONLY Username, Email, Password, Confirm Password, Register Button */}
+          <form onSubmit={handleSignup} className="space-y-4">
             
-            {/* Full Name */}
+            {/* Username */}
             <div>
-              <label className="block text-xs font-semibold text-[#A89887] uppercase tracking-wider mb-1">
-                Executive Full Name *
+              <label className="block text-xs font-semibold text-[#4A3E36] uppercase tracking-wider mb-1.5">
+                Username
               </label>
               <div className="relative">
-                <User className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[#736353]" />
+                <User className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[#8A7B6E]" />
                 <input
                   type="text"
                   required
-                  value={fullName}
-                  onChange={(e) => setFullName(e.target.value)}
-                  placeholder="e.g. Ananya Singhania"
-                  className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-[#1C1613] border border-[#30251E] text-xs text-[#FAF8F5] placeholder-[#736353] focus:outline-none focus:border-[#C5A059] transition-colors"
+                  autoFocus
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                  placeholder="Enter username"
+                  className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-[#FAF8F5] border border-[#EAE2D5] text-xs text-[#1C1613] placeholder-[#8A7B6E] focus:outline-none focus:border-[#936718] transition-colors"
                 />
               </div>
             </div>
 
-            {/* Email & Role in 2 Columns */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div>
-                <label className="block text-xs font-semibold text-[#A89887] uppercase tracking-wider mb-1">
-                  Official Email *
-                </label>
-                <div className="relative">
-                  <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[#736353]" />
-                  <input
-                    type="email"
-                    required
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    placeholder="director@zaymera.com"
-                    className="w-full pl-10 pr-3.5 py-2.5 rounded-xl bg-[#1C1613] border border-[#30251E] text-xs text-[#FAF8F5] placeholder-[#736353] focus:outline-none focus:border-[#C5A059] transition-colors"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-[#A89887] uppercase tracking-wider mb-1">
-                  Atelier Role
-                </label>
-                <div className="relative">
-                  <Briefcase className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[#736353]" />
-                  <select
-                    value={role}
-                    onChange={(e) => setRole(e.target.value)}
-                    className="w-full pl-10 pr-3.5 py-2.5 rounded-xl bg-[#1C1613] border border-[#30251E] text-xs text-[#FAF8F5] focus:outline-none focus:border-[#C5A059] transition-colors appearance-none"
-                  >
-                    <option value="Atelier Store Director">Store Director</option>
-                    <option value="Catalog & Inventory Lead">Catalog & Inventory Lead</option>
-                    <option value="Bespoke Concierge Specialist">Concierge Specialist</option>
-                    <option value="Orders & Logistics Manager">Orders Manager</option>
-                  </select>
-                </div>
-              </div>
-            </div>
-
-            {/* Password & Confirm Password */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div>
-                <label className="block text-xs font-semibold text-[#A89887] uppercase tracking-wider mb-1">
-                  Password *
-                </label>
-                <div className="relative">
-                  <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[#736353]" />
-                  <input
-                    type={showPassword ? 'text' : 'password'}
-                    required
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    placeholder="Min 6 characters"
-                    className="w-full pl-10 pr-10 py-2.5 rounded-xl bg-[#1C1613] border border-[#30251E] text-xs text-[#FAF8F5] placeholder-[#736353] focus:outline-none focus:border-[#C5A059] transition-colors"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3.5 top-1/2 -translate-y-1/2 text-[#736353] hover:text-[#FAF8F5]"
-                  >
-                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                  </button>
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-[#A89887] uppercase tracking-wider mb-1">
-                  Confirm Password *
-                </label>
-                <div className="relative">
-                  <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[#736353]" />
-                  <input
-                    type={showPassword ? 'text' : 'password'}
-                    required
-                    value={confirmPassword}
-                    onChange={(e) => setConfirmPassword(e.target.value)}
-                    placeholder="Repeat password"
-                    className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-[#1C1613] border border-[#30251E] text-xs text-[#FAF8F5] placeholder-[#736353] focus:outline-none focus:border-[#C5A059] transition-colors"
-                  />
-                </div>
-              </div>
-            </div>
-
-            {/* Optional Master Passcode */}
+            {/* Email */}
             <div>
-              <label className="block text-xs font-semibold text-[#A89887] uppercase tracking-wider mb-1">
-                Boutique Authorization Key (Optional)
+              <label className="block text-xs font-semibold text-[#4A3E36] uppercase tracking-wider mb-1.5">
+                Email
               </label>
-              <input
-                type="text"
-                value={adminSecurityCode}
-                onChange={(e) => setAdminSecurityCode(e.target.value)}
-                placeholder="Leave blank or enter store access code"
-                className="w-full px-3.5 py-2.5 rounded-xl bg-[#1C1613] border border-[#30251E] text-xs text-[#FAF8F5] placeholder-[#736353] focus:outline-none focus:border-[#C5A059] transition-colors"
-              />
+              <div className="relative">
+                <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[#8A7B6E]" />
+                <input
+                  type="email"
+                  required
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="Enter email address"
+                  className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-[#FAF8F5] border border-[#EAE2D5] text-xs text-[#1C1613] placeholder-[#8A7B6E] focus:outline-none focus:border-[#936718] transition-colors"
+                />
+              </div>
             </div>
 
-            {/* Submit Button */}
+            {/* Password */}
+            <div>
+              <label className="block text-xs font-semibold text-[#4A3E36] uppercase tracking-wider mb-1.5">
+                Password
+              </label>
+              <div className="relative">
+                <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[#8A7B6E]" />
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  required
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="Enter password (min 4 characters)"
+                  className="w-full pl-10 pr-10 py-2.5 rounded-xl bg-[#FAF8F5] border border-[#EAE2D5] text-xs text-[#1C1613] placeholder-[#8A7B6E] focus:outline-none focus:border-[#936718] transition-colors"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3.5 top-1/2 -translate-y-1/2 text-[#8A7B6E] hover:text-[#1C1613] cursor-pointer"
+                  title={showPassword ? 'Hide password' : 'Show password'}
+                >
+                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
+            </div>
+
+            {/* Confirm Password */}
+            <div>
+              <label className="block text-xs font-semibold text-[#4A3E36] uppercase tracking-wider mb-1.5">
+                Confirm Password
+              </label>
+              <div className="relative">
+                <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[#8A7B6E]" />
+                <input
+                  type={showConfirmPassword ? 'text' : 'password'}
+                  required
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  placeholder="Confirm password"
+                  className="w-full pl-10 pr-10 py-2.5 rounded-xl bg-[#FAF8F5] border border-[#EAE2D5] text-xs text-[#1C1613] placeholder-[#8A7B6E] focus:outline-none focus:border-[#936718] transition-colors"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                  className="absolute right-3.5 top-1/2 -translate-y-1/2 text-[#8A7B6E] hover:text-[#1C1613] cursor-pointer"
+                  title={showConfirmPassword ? 'Hide password' : 'Show password'}
+                >
+                  {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
+            </div>
+
+            {/* Register Button */}
             <button
               type="submit"
               disabled={loading}
-              className="w-full mt-3 py-3 px-4 rounded-xl bg-gradient-to-r from-[#C5A059] to-[#9B2242] hover:opacity-95 text-white text-xs font-bold tracking-wide uppercase shadow-lg shadow-[#9B2242]/20 active:scale-[0.99] transition-all flex items-center justify-center gap-2 cursor-pointer"
+              className="w-full mt-2 py-3 px-4 rounded-xl bg-gradient-to-r from-[#C5A059] to-[#9B2242] hover:opacity-95 text-white text-xs font-bold tracking-wider uppercase shadow-sm active:scale-[0.99] transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-60"
             >
-              <span>{loading ? 'Creating Profile...' : 'Complete Registration'}</span>
-              <ArrowRight className="w-4 h-4" />
+              <span>{loading ? 'Registering...' : 'Register'}</span>
             </button>
           </form>
 
-          {/* Footer Link to Sign In */}
-          <div className="pt-2 text-center text-xs text-[#8C7B6C]">
-            <span>Already have an executive login? </span>
+          {/* Clean Link to Sign In */}
+          <div className="pt-2 text-center text-xs text-[#6B5E52]">
+            <span>Already have an account? </span>
             <Link
               href="/admin/login"
-              className="text-[#E2B755] font-bold hover:underline"
+              className="text-[#936718] font-bold hover:underline"
             >
-              Sign In Here
+              Login
             </Link>
           </div>
 
         </div>
       </main>
 
-      {/* Footer Security Badge */}
-      <footer className="w-full max-w-md text-center py-2 z-10 flex items-center justify-center gap-2 text-[11px] text-[#736353]">
-        <ShieldCheck className="w-3.5 h-3.5 text-[#22C55E]" />
-        <span>Secure Atelier Staff Registration • Zaymera v1.0</span>
+      {/* Footer */}
+      <footer className="w-full max-w-md text-center py-2 z-10 text-[11px] text-[#8A7B6E]">
+        <span>Zaymera Boutique Admin</span>
       </footer>
 
     </div>

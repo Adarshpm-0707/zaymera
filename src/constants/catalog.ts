@@ -15,9 +15,6 @@ export const NAV_CATEGORIES: NavCategory[] = [
   { name: "ALL PRODUCTS", slug: "products-page" },
   { name: "NEW ARRIVALS", slug: "new-arrivals" },
   { name: "MOST SELLING", slug: "most-selling" },
-  { name: "CUSTOMIZED", slug: "customized" },
-  { name: "TOPS", slug: "tops" },
-  { name: "TOP AND DUPATTA", slug: "top-dupatta" },
   { name: "TRACK ORDER", slug: "track-order" }
 ];
 
