@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { SLIDES_DATA } from '@/constants/slides';
 import { PRODUCTS_CATALOG } from '@/constants/catalog';
 import { SlideData, ProductItem } from '@/types';
-import { fetchProducts, getInitialProducts, getLocalProducts } from '@/lib/supabase/services';
+import { fetchProducts, getInitialProducts, getLocalProducts, fetchCategories, CategoryItem } from '@/lib/supabase/services';
 
 // Modular Layout Components
 import { Header } from '@/components/layout/Header';
@@ -35,9 +35,16 @@ import { useWishlist } from '@/hooks/useWishlist';
 
 export default function Home() {
   const [productsList, setProductsList] = useState<ProductItem[]>([]);
+  const [categoriesList, setCategoriesList] = useState<CategoryItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
+    // 0. Fetch categories
+    fetchCategories().then(res => {
+      if (res.data) {
+        setCategoriesList(res.data);
+      }
+    }).catch(() => {});
     // 1. Immediately hydrate from local cache on client mount (avoids hydration mismatch)
     const local = getLocalProducts();
     if (local && local.length > 0) {
@@ -136,6 +143,7 @@ export default function Home() {
           onOpenTrackOrder={() => setIsTrackOrderOpen(true)}
           onOpenSearch={() => setIsSearchOpen(true)}
           onOpenAuth={() => setIsAuthOpen(true)}
+          categories={categoriesList}
         />
 
         {/* Mega Menu Dropdown */}
@@ -143,6 +151,7 @@ export default function Home() {
           isOpen={isMegaMenuOpen}
           onClose={() => setIsMegaMenuOpen(false)}
           onSelectCategory={handleExploreCategory}
+          categories={categoriesList}
         />
       </div>
 
@@ -166,6 +175,7 @@ export default function Home() {
             onSelectCategory={handleExploreCategory}
             wishlistIds={wishlistIds}
             onToggleWishlist={toggleWishlist}
+            categories={categoriesList}
           />
         </div>
       </main>

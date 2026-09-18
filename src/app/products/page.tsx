@@ -17,7 +17,7 @@ import {
   RefreshCw,
   Store
 } from 'lucide-react';
-import { fetchProducts, getInitialProducts, getLocalProducts, fetchCategories } from '@/lib/supabase/services';
+import { fetchProducts, getInitialProducts, getLocalProducts, fetchCategories, CategoryItem } from '@/lib/supabase/services';
 import { ProductItem, SlideData } from '@/types';
 import { Header } from '@/components/layout/Header';
 import { CategoryMegaMenu } from '@/components/layout/CategoryMegaMenu';
@@ -33,33 +33,25 @@ import { Footer } from '@/components/layout/Footer';
 import { useCart } from '@/hooks/useCart';
 import { useWishlist } from '@/hooks/useWishlist';
 
-const FALLBACK_CATEGORIES = [
-  { label: 'All Ensembles',       slug: 'all'                 },
-  { label: 'Casual Co-Ords',      slug: 'casual-wear'         },
-  { label: 'Festive Anarkalis',   slug: 'festive-wear'        },
-  { label: 'Wedding Trousseau',   slug: 'wedding-collection'  },
-  { label: 'Unstitched Silks',    slug: 'unstitched-material' },
-  { label: 'Tops & Tunics',       slug: 'tops'                },
-  { label: 'Top & Dupatta',       slug: 'top-dupatta'         },
-  { label: 'Customized Atelier',  slug: 'customized'          },
-];
-
 function ProductsContent() {
   const searchParams = useSearchParams();
   const [products, setProducts] = useState<ProductItem[]>([]);
   const [loading, setLoading]   = useState(true);
 
-  // Dynamic categories — load from admin + fallback
-  const [categoryList, setCategoryList] = useState(FALLBACK_CATEGORIES);
+  // Dynamic categories — loaded exclusively from admin
+  const [categoryList, setCategoryList] = useState<{ label: string; slug: string }[]>([
+    { label: 'All Ensembles', slug: 'all' }
+  ]);
+  const [dynCategories, setDynCategories] = useState<CategoryItem[]>([]);
+
   useEffect(() => {
     fetchCategories().then(({ data }) => {
-      if (data && data.length > 0) {
-        const merged = [
+      if (data) {
+        setDynCategories(data);
+        setCategoryList([
           { label: 'All Ensembles', slug: 'all' },
-          ...data.map(c => ({ label: c.title, slug: c.slug })),
-          ...FALLBACK_CATEGORIES.filter(f => f.slug !== 'all' && !data.some(d => d.slug === f.slug))
-        ];
-        setCategoryList(merged);
+          ...data.map(c => ({ label: c.title, slug: c.slug }))
+        ]);
       }
     }).catch(() => {});
   }, []);
@@ -137,7 +129,9 @@ function ProductsContent() {
 
   // Filter & Sort Logic
   const filteredProducts = products.filter(p => {
-    const matchesCategory = selectedCategory === 'all' || p.category === selectedCategory;
+    const matchesCategory = selectedCategory === 'all' || 
+      p.category === selectedCategory || 
+      p.category?.toLowerCase() === selectedCategory.toLowerCase();
     const matchesSearch =
       !searchQuery.trim() ||
       p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -171,11 +165,13 @@ function ProductsContent() {
           onOpenTrackOrder={() => setIsTrackOrderOpen(true)}
           onOpenSearch={() => setIsSearchOpen(true)}
           onOpenAuth={() => setIsAuthOpen(true)}
+          categories={dynCategories}
         />
 
         <CategoryMegaMenu
           isOpen={isMegaMenuOpen}
           onClose={() => setIsMegaMenuOpen(false)}
+          categories={dynCategories}
           onSelectCategory={(cat) => {
             setSelectedCategory(cat);
             setIsMegaMenuOpen(false);

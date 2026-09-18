@@ -1,4 +1,4 @@
-import { supabase, isSupabaseConfigured } from './client';
+import { supabase, isSupabaseConfigured, supabaseAdmin } from './client';
 import { ProductItem, CartItem } from '@/types';
 import { PRODUCTS_CATALOG } from '@/constants/catalog';
 
@@ -29,8 +29,8 @@ export interface OrderInput {
 export interface InquiryInput {
   name: string;
   email: string;
-  phone?: string;
-  serviceType?: string;
+  phone: string;
+  serviceType: string;
   message: string;
 }
 
@@ -54,6 +54,9 @@ export interface CustomerItem {
   ordersCount: number;
   tier: 'VIP' | 'Regular' | 'New';
   joinedDate: string;
+  isRegistered?: boolean;
+  authId?: string;
+  lastLogin?: string;
 }
 
 export interface CouponItem {
@@ -93,15 +96,16 @@ export interface BannerItem {
 // ─────────────────────────────────────────────────────────────────────────────
 
 const LS = {
-  PRODUCTS:       'zaymera_admin_custom_products',
-  ORDERS:         'zaymera_admin_orders',
-  INQUIRIES:      'zaymera_admin_inquiries',
-  CATEGORIES:     'zaymera_admin_categories',
-  CUSTOMERS:      'zaymera_admin_customers',
-  COUPONS:        'zaymera_admin_coupons',
-  STORE_SETTINGS: 'zaymera_admin_store_settings',
-  BANNERS:        'zaymera_admin_banners',
-  PURGE_KEY:      'zaymera_products_purged_v2',
+  PRODUCTS:          'zaymera_admin_custom_products',
+  ORDERS:            'zaymera_admin_orders',
+  INQUIRIES:         'zaymera_admin_inquiries',
+  CATEGORIES:        'zaymera_admin_categories',
+  CUSTOMERS:         'zaymera_admin_customers',
+  DELETED_CUSTOMERS: 'zaymera_admin_deleted_customers',
+  COUPONS:           'zaymera_admin_coupons',
+  STORE_SETTINGS:    'zaymera_admin_store_settings',
+  BANNERS:           'zaymera_admin_banners',
+  PURGE_KEY:         'zaymera_products_purged_v2',
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -975,6 +979,40 @@ export async function updateOrderStatus(orderId: string, status: string): Promis
   return { success: true, error: null };
 }
 
+export async function deleteOrder(orderId: string): Promise<{ success: boolean; error: any }> {
+  // Update in-memory cache and localStorage
+  const currentLocal = getLocalOrders();
+  const updated = currentLocal.filter(o => o.id !== orderId && o.order_number !== orderId);
+  cachedOrders = updated;
+  saveLocalOrders(updated);
+
+  // Remove from Supabase if table is available
+  if (isTableAvailable('orders')) {
+    try {
+      // Find matching order id in case orderId was order_number
+      const { data: matched } = await supabase
+        .from('orders')
+        .select('id')
+        .or(`id.eq.${orderId},order_number.eq.${orderId}`);
+
+      const targetIds = (matched && matched.length > 0) ? matched.map((m: any) => m.id) : [orderId];
+
+      // Delete child items first to satisfy foreign key constraints
+      await supabase.from('order_items').delete().in('order_id', targetIds);
+      // Delete parent order
+      const { error } = await supabase.from('orders').delete().in('id', targetIds);
+
+      if (error && isMissingTableError(error)) {
+        markTableUnavailable('orders');
+      }
+    } catch (err) {
+      console.error('Failed to delete order from Supabase:', err);
+    }
+  }
+  return { success: true, error: null };
+}
+
+
 export async function getOrderByNumber(orderNumber: string) {
   const localOrders = getLocalOrders();
   const found = localOrders.find(o => o.order_number.toLowerCase() === orderNumber.trim().toLowerCase());
@@ -1098,26 +1136,40 @@ export async function updateInquiryStatus(inquiryId: string, status: string): Pr
 // 4. CATEGORIES
 // ─────────────────────────────────────────────────────────────────────────────
 
-const DEFAULT_CATEGORIES: CategoryItem[] = [
-  { id: 'cat-1', title: 'Casual Co-Ord Sets', slug: 'casual-wear', count: '60+ Styles', image: '/images/pink_polka_coord_1788314855326.jpg', description: 'Bespoke imported crepe polka dot matching sets.', featured: true },
-  { id: 'cat-2', title: 'Festive Anarkalis & Churidars', slug: 'festive-wear', count: '140+ Designs', image: '/images/royal_blue_anarkali_1788292199640.jpg', description: 'Flared tree-of-life embroidery ensembles.', featured: true },
-  { id: 'cat-3', title: 'Wedding & Ceremony Troussau', slug: 'wedding-collection', count: '95+ Ensembles', image: '/images/ivory_anarkali_1788292215541.jpg', description: 'Opulent ivory and crimson pure handloom bridal couture.', featured: true },
-  { id: 'cat-4', title: 'Unstitched Pure Silks', slug: 'unstitched-material', count: '40+ Weaves', image: 'https://images.unsplash.com/photo-1617627143750-d86bc21e42bb?q=80&w=1000', description: 'Chanderi silk 3-piece suites with gold zari borders.', featured: false },
-  { id: 'cat-5', title: 'Tops & Designer Tunics', slug: 'tops', count: '35+ Cuts', image: '/images/teal_polka_coord_1788314878566.jpg', description: 'Comfort fit luxury tunics and handcrafted boutique tops.', featured: false },
-  { id: 'cat-6', title: 'Top and Dupatta Sets', slug: 'top-dupatta', count: '50+ Ensembles', image: '/images/sage_polka_coord_1788314896370.jpg', description: 'Versatile paired sets with organza dupattas.', featured: false },
-];
+const DEFAULT_CATEGORIES: CategoryItem[] = [];
+
+const MOCK_CATEGORY_IDS = new Set(['cat-1', 'cat-2', 'cat-3', 'cat-4', 'cat-5', 'cat-6']);
+
+function checkAndPurgeOldMockCategories() {
+  if (typeof window === 'undefined') return;
+  try {
+    const purgeKey = 'zaymera_categories_purged_v2';
+    if (!localStorage.getItem(purgeKey)) {
+      const existing = lsGet<CategoryItem[]>(LS.CATEGORIES, []);
+      const clean = existing.filter(c => !MOCK_CATEGORY_IDS.has(c.id));
+      localStorage.setItem(LS.CATEGORIES, JSON.stringify(clean));
+      localStorage.setItem(purgeKey, 'true');
+      cachedCategories = clean;
+    }
+  } catch { /* ignore */ }
+}
 
 export function getLocalCategories(): CategoryItem[] {
-  return lsGet<CategoryItem[]>(LS.CATEGORIES, DEFAULT_CATEGORIES);
+  if (typeof window === 'undefined') return [];
+  checkAndPurgeOldMockCategories();
+  const cats = lsGet<CategoryItem[]>(LS.CATEGORIES, DEFAULT_CATEGORIES);
+  return cats.filter(c => !MOCK_CATEGORY_IDS.has(c.id));
 }
 
 export function saveLocalCategories(cats: CategoryItem[]) {
-  cachedCategories = cats;
-  lsSet(LS.CATEGORIES, cats);
+  const clean = cats.filter(c => !MOCK_CATEGORY_IDS.has(c.id));
+  cachedCategories = clean;
+  lsSet(LS.CATEGORIES, clean);
 }
 
 export async function fetchCategories(): Promise<{ data: CategoryItem[]; error: any }> {
-  if (cachedCategories && cachedCategories.length > 0) {
+  checkAndPurgeOldMockCategories();
+  if (cachedCategories !== null) {
     _refreshCategoriesFromDb().catch(() => {});
     return { data: cachedCategories, error: null };
   }
@@ -1134,10 +1186,10 @@ async function _refreshCategoriesFromDb(): Promise<{ data: CategoryItem[]; error
   try {
     const result = await withTimeout(
       supabase.from('categories').select('*').order('sort_order', { ascending: true }) as any,
-      1500,
+      4000,
       { data: null, error: 'timeout' }
     );
-    if (result.error || result.data === null || result.data.length === 0) {
+    if (result.error || result.data === null) {
       if (isMissingTableError(result.error)) {
         markTableUnavailable('categories');
       }
@@ -1150,11 +1202,12 @@ async function _refreshCategoriesFromDb(): Promise<{ data: CategoryItem[]; error
       image: c.image, description: c.description, featured: c.featured
     }));
 
-    // Merge: DB-sourced + local-only categories not yet in DB
+    // Single source of truth: DB-sourced + any local-only categories not yet in DB (excluding mocks)
     const merged = [
       ...formatted,
-      ...local.filter(lc => !formatted.some(fc => fc.slug === lc.slug))
-    ];
+      ...local.filter(lc => !formatted.some(fc => fc.id === lc.id || fc.slug === lc.slug))
+    ].filter(c => !MOCK_CATEGORY_IDS.has(c.id));
+
     cachedCategories = merged;
     saveLocalCategories(merged);
     return { data: merged, error: null };

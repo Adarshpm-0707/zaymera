@@ -44,7 +44,7 @@ export default function AdminCategoriesPage() {
   const loadCategories = async () => {
     try {
       const { data } = await fetchCategories();
-      if (data && data.length > 0) setCategories(data);
+      if (data) setCategories(data);
     } catch (err) {
       console.error(err);
     } finally {

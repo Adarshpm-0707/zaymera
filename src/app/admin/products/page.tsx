@@ -65,21 +65,7 @@ export default function AdminProductsPage() {
     fetchCategories().then(({ data }) => { if (data) setDynCategories(data); });
   }, []);
 
-  const HARDCODED_CATS = [
-    { id: 'casual-wear',         title: 'Casual Co-Ord Sets',  slug: 'casual-wear'         },
-    { id: 'festive-wear',        title: 'Festive Anarkalis',    slug: 'festive-wear'        },
-    { id: 'wedding-collection',  title: 'Wedding & Ceremonial', slug: 'wedding-collection'  },
-    { id: 'unstitched-material', title: 'Unstitched Silks',     slug: 'unstitched-material' },
-    { id: 'tops',                title: 'Tops & Tunics',        slug: 'tops'                },
-    { id: 'top-dupatta',         title: 'Top and Dupatta',      slug: 'top-dupatta'         },
-    { id: 'customized',          title: 'Customized Atelier',   slug: 'customized'          },
-  ];
-  const allCategories: CategoryItem[] = dynCategories.length > 0
-    ? [
-        ...dynCategories,
-        ...HARDCODED_CATS.filter(h => !dynCategories.some(d => d.slug === h.slug)) as any
-      ]
-    : HARDCODED_CATS as any;
+  const allCategories: CategoryItem[] = dynCategories;
   
   const [toastMessage, setToastMessage] = useState('');
 
@@ -99,7 +85,30 @@ export default function AdminProductsPage() {
     }
   };
 
-  const checkDb = async () => {
+  const [dismissedDbBanner, setDismissedDbBanner] = useState(false);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const dismissed = localStorage.getItem('zaymera_dismiss_db_banner');
+      if (dismissed === 'true') setDismissedDbBanner(true);
+    }
+  }, []);
+
+  const handleDismissBanner = () => {
+    setDismissedDbBanner(true);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('zaymera_dismiss_db_banner', 'true');
+    }
+  };
+
+  const handleRestoreBanner = () => {
+    setDismissedDbBanner(false);
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('zaymera_dismiss_db_banner');
+    }
+  };
+
+  const checkDb = async (manual = false) => {
     setDbStatus(prev => ({ ...prev, checking: true }));
     try {
       const res = await checkDatabaseConnection();
@@ -109,6 +118,14 @@ export default function AdminProductsPage() {
         tableExists: res.tableExists,
         error: res.error
       });
+      if (manual) {
+        if (res.tableExists) {
+          showToast('✅ Live Supabase table verified! Syncing local products to cloud...');
+          await handleSyncLocalToDb();
+        } else {
+          showToast('⚠️ Table not found in Supabase yet. Please paste the SQL and click "Run" in Supabase.');
+        }
+      }
     } catch {
       setDbStatus({
         checked: true,
@@ -116,6 +133,9 @@ export default function AdminProductsPage() {
         tableExists: false,
         error: 'Failed to verify Supabase connection'
       });
+      if (manual) {
+        showToast('❌ Could not connect to Supabase. Please verify your connection.');
+      }
     }
   };
 
@@ -135,7 +155,10 @@ export default function AdminProductsPage() {
 --  Run this in Supabase Dashboard → SQL Editor → New Query → Run
 -- =============================================================
 
--- 1. PRODUCTS TABLE
+-- 1. ENSURE PUBLIC SCHEMA USAGE
+GRANT USAGE ON SCHEMA public TO anon, authenticated, service_role;
+
+-- 2. PRODUCTS TABLE
 CREATE TABLE IF NOT EXISTS public.products (
   id              TEXT        PRIMARY KEY,
   name            TEXT        NOT NULL,
@@ -156,26 +179,66 @@ CREATE TABLE IF NOT EXISTS public.products (
   updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+-- Auto-update updated_at timestamp
+CREATE OR REPLACE FUNCTION public.set_updated_at()
+RETURNS TRIGGER LANGUAGE plpgsql AS $$
+BEGIN NEW.updated_at = NOW(); RETURN NEW; END; $$;
+
+DROP TRIGGER IF EXISTS products_updated_at ON public.products;
+CREATE TRIGGER products_updated_at
+  BEFORE UPDATE ON public.products
+  FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
 -- DISABLE RLS FOR PRODUCTS (Permit Public Storefront Access)
 ALTER TABLE public.products DISABLE ROW LEVEL SECURITY;
 GRANT ALL ON TABLE public.products TO anon, authenticated, service_role;
+GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO anon, authenticated, service_role;
 
--- 2. STORAGE BUCKET FOR PRODUCT IMAGES
-INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
-VALUES ('product-images', 'product-images', TRUE, 10485760, ARRAY['image/jpeg','image/jpg','image/png','image/webp','image/gif'])
-ON CONFLICT (id) DO UPDATE SET public = TRUE;
+-- 3. STORAGE BUCKET FOR PRODUCT IMAGES (Safe execution)
+DO $$
+BEGIN
+  INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+  VALUES ('product-images', 'product-images', TRUE, 10485760, ARRAY['image/jpeg','image/jpg','image/png','image/webp','image/gif'])
+  ON CONFLICT (id) DO UPDATE SET public = TRUE;
+EXCEPTION WHEN OTHERS THEN
+  RAISE NOTICE 'Bucket notice: %', SQLERRM;
+END $$;
 
-DROP POLICY IF EXISTS "Public select product-images" ON storage.objects;
-CREATE POLICY "Public select product-images" ON storage.objects FOR SELECT USING (bucket_id = 'product-images');
+-- 4. STORAGE POLICIES (Safe execution against 42501 permission errors)
+DO $$
+BEGIN
+  DROP POLICY IF EXISTS "Public select product-images" ON storage.objects;
+  CREATE POLICY "Public select product-images" ON storage.objects FOR SELECT USING (bucket_id = 'product-images');
+EXCEPTION WHEN OTHERS THEN
+  RAISE NOTICE 'Select policy notice: %', SQLERRM;
+END $$;
 
-DROP POLICY IF EXISTS "Public insert product-images" ON storage.objects;
-CREATE POLICY "Public insert product-images" ON storage.objects FOR INSERT WITH CHECK (bucket_id = 'product-images');
+DO $$
+BEGIN
+  DROP POLICY IF EXISTS "Public insert product-images" ON storage.objects;
+  CREATE POLICY "Public insert product-images" ON storage.objects FOR INSERT WITH CHECK (bucket_id = 'product-images');
+EXCEPTION WHEN OTHERS THEN
+  RAISE NOTICE 'Insert policy notice: %', SQLERRM;
+END $$;
 
-DROP POLICY IF EXISTS "Public update product-images" ON storage.objects;
-CREATE POLICY "Public update product-images" ON storage.objects FOR UPDATE USING (bucket_id = 'product-images');
+DO $$
+BEGIN
+  DROP POLICY IF EXISTS "Public update product-images" ON storage.objects;
+  CREATE POLICY "Public update product-images" ON storage.objects FOR UPDATE USING (bucket_id = 'product-images');
+EXCEPTION WHEN OTHERS THEN
+  RAISE NOTICE 'Update policy notice: %', SQLERRM;
+END $$;
 
-DROP POLICY IF EXISTS "Public delete product-images" ON storage.objects;
-CREATE POLICY "Public delete product-images" ON storage.objects FOR DELETE USING (bucket_id = 'product-images');
+DO $$
+BEGIN
+  DROP POLICY IF EXISTS "Public delete product-images" ON storage.objects;
+  CREATE POLICY "Public delete product-images" ON storage.objects FOR DELETE USING (bucket_id = 'product-images');
+EXCEPTION WHEN OTHERS THEN
+  RAISE NOTICE 'Delete policy notice: %', SQLERRM;
+END $$;
+
+-- 5. RELOAD SCHEMA CACHE (Immediate recognition in Supabase API)
+NOTIFY pgrst, 'reload schema';
 `;
     navigator.clipboard.writeText(sql).then(() => {
       setCopiedSql(true);
@@ -350,48 +413,101 @@ CREATE POLICY "Public delete product-images" ON storage.objects FOR DELETE USING
 
       {/* Database Diagnostic & Sync Banner */}
       {dbStatus.checked && !dbStatus.tableExists && (
-        <div className="p-4 sm:p-5 rounded-2xl bg-[#FFFBEB] border border-[#FDE68A] text-[#92400E] shadow-sm animate-in fade-in">
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-            <div className="space-y-1.5 flex-1">
+        dismissedDbBanner ? (
+          /* Compact discreet indicator when dismissed */
+          <div className="px-4 py-2.5 rounded-2xl bg-[#FFFBEB] border border-[#FDE68A] text-[#92400E] shadow-xs flex items-center justify-between gap-3 text-xs animate-in fade-in">
+            <div className="flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-[#D97706] shrink-0" />
+              <span className="text-[11px] sm:text-xs">
+                <strong>Local Storage Active:</strong> Products are saved in this browser. Cloud &apos;products&apos; table is not set up yet.
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={handleRestoreBanner}
+              className="text-[11px] font-bold text-[#B45309] hover:text-[#78350F] underline cursor-pointer shrink-0"
+            >
+              Setup Database
+            </button>
+          </div>
+        ) : (
+          /* Full setup banner with quick guide & dismiss button */
+          <div className="relative p-4 sm:p-5 rounded-2xl bg-[#FFFBEB] border border-[#FDE68A] text-[#92400E] shadow-sm animate-in fade-in">
+            {/* Top Close / Dismiss Button */}
+            <button
+              type="button"
+              onClick={handleDismissBanner}
+              className="absolute top-3.5 right-3.5 p-1.5 rounded-lg text-[#B45309] hover:text-[#78350F] hover:bg-[#FEF3C7] transition-colors cursor-pointer"
+              title="Dismiss alert"
+            >
+              <X className="w-4 h-4" />
+            </button>
+
+            <div className="space-y-3 pr-6">
               <div className="flex items-center gap-2 font-bold text-sm sm:text-base text-[#B45309]">
                 <AlertCircle className="w-5 h-5 text-[#D97706] shrink-0" />
                 <span>Supabase Database Setup Required (Products Table Missing)</span>
               </div>
-              <p className="text-xs text-[#78350F] leading-relaxed">
+
+              <p className="text-xs text-[#78350F] leading-relaxed max-w-3xl">
                 The <code className="bg-[#FEF3C7] px-1.5 py-0.5 rounded font-mono font-bold text-[#92400E]">products</code> table does not exist in your Supabase database yet. Products added right now are saved in this browser&apos;s offline cache only, and <strong>will not be visible after deployment</strong> until you create the table.
               </p>
-            </div>
-            <div className="flex items-center gap-2 flex-wrap shrink-0">
-              <button
-                type="button"
-                onClick={handleCopySql}
-                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-[#D97706] hover:bg-[#B45309] text-white text-xs font-bold transition-all shadow-xs cursor-pointer active:scale-95"
-              >
-                {copiedSql ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
-                <span>{copiedSql ? 'Copied SQL!' : 'Copy SQL Schema'}</span>
-              </button>
-              <a
-                href="https://supabase.com/dashboard/project/hvhxdjkhodjdqysqziew/sql/new"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-white hover:bg-[#FEF3C7] border border-[#FDE68A] text-[#92400E] text-xs font-bold transition-all shadow-xs cursor-pointer"
-              >
-                <span>Supabase SQL Editor</span>
-                <ExternalLink className="w-3.5 h-3.5" />
-              </a>
-              <button
-                type="button"
-                onClick={checkDb}
-                disabled={dbStatus.checking}
-                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white hover:bg-[#FEF3C7] border border-[#FDE68A] text-[#92400E] text-xs font-semibold transition-all cursor-pointer"
-                title="Recheck table existence"
-              >
-                <RefreshCw className={`w-3.5 h-3.5 ${dbStatus.checking ? 'animate-spin' : ''}`} />
-                <span>Verify</span>
-              </button>
+
+              {/* Quick Step Guide */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-1 pb-1">
+                <div className="p-2.5 rounded-xl bg-white/70 border border-[#FDE68A] text-[11px] text-[#78350F]">
+                  <span className="font-bold text-[#B45309] block mb-0.5">Step 1</span>
+                  Click <strong>&quot;Copy SQL Schema&quot;</strong> below
+                </div>
+                <div className="p-2.5 rounded-xl bg-white/70 border border-[#FDE68A] text-[11px] text-[#78350F]">
+                  <span className="font-bold text-[#B45309] block mb-0.5">Step 2</span>
+                  Open <strong>&quot;Supabase SQL Editor&quot;</strong>, paste &amp; click <strong>Run</strong>
+                </div>
+                <div className="p-2.5 rounded-xl bg-white/70 border border-[#FDE68A] text-[11px] text-[#78350F]">
+                  <span className="font-bold text-[#B45309] block mb-0.5">Step 3</span>
+                  Return here and click <strong>&quot;Verify&quot;</strong>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 flex-wrap pt-1">
+                <button
+                  type="button"
+                  onClick={handleCopySql}
+                  className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-[#D97706] hover:bg-[#B45309] text-white text-xs font-bold transition-all shadow-xs cursor-pointer active:scale-95"
+                >
+                  {copiedSql ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                  <span>{copiedSql ? 'Copied SQL!' : 'Copy SQL Schema'}</span>
+                </button>
+                <a
+                  href="https://supabase.com/dashboard/project/hvhxdjkhodjdqysqziew/sql/new"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-white hover:bg-[#FEF3C7] border border-[#FDE68A] text-[#92400E] text-xs font-bold transition-all shadow-xs cursor-pointer"
+                >
+                  <span>Supabase SQL Editor</span>
+                  <ExternalLink className="w-3.5 h-3.5" />
+                </a>
+                <button
+                  type="button"
+                  onClick={() => checkDb(true)}
+                  disabled={dbStatus.checking}
+                  className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-white hover:bg-[#FEF3C7] border border-[#FDE68A] text-[#92400E] text-xs font-semibold transition-all cursor-pointer"
+                  title="Recheck table existence"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${dbStatus.checking ? 'animate-spin' : ''}`} />
+                  <span>Verify</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={handleDismissBanner}
+                  className="text-xs text-[#92400E] hover:text-[#78350F] px-2.5 py-1.5 rounded-lg hover:bg-white/50 cursor-pointer ml-auto"
+                >
+                  Dismiss
+                </button>
+              </div>
             </div>
           </div>
-        </div>
+        )
       )}
 
       {/* When Table Exists: Show Live Sync Bar */}

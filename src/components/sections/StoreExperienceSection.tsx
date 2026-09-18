@@ -1,14 +1,15 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { motion, type Variants } from 'motion/react';
 import { Sparkles, ArrowRight, ShieldCheck, Scissors, Truck, Award, Eye, ShoppingCart, Check, Heart } from 'lucide-react';
 import { WhatsAppIcon } from '@/components/icons/WhatsAppIcon';
-import { PRODUCTS_CATALOG, CATEGORY_TILES, circleLogoImg } from '@/constants/catalog';
+import { PRODUCTS_CATALOG, circleLogoImg } from '@/constants/catalog';
 import { SITE_CONFIG } from '@/constants/siteConfig';
 import { Footer } from '@/components/layout/Footer';
 import { ProductItem } from '@/types';
+import { fetchCategories, CategoryItem } from '@/lib/supabase/services';
 
 interface StoreExperienceSectionProps {
   products?: ProductItem[];
@@ -20,6 +21,7 @@ interface StoreExperienceSectionProps {
   onSelectCategory: (cat: string) => void;
   wishlistIds: string[];
   onToggleWishlist: (product: ProductItem) => void;
+  categories?: CategoryItem[];
 }
 
 const containerVariants: Variants = {
@@ -274,9 +276,21 @@ export const StoreExperienceSection: React.FC<StoreExperienceSectionProps> = ({
   selectedCategory,
   onSelectCategory,
   wishlistIds,
-  onToggleWishlist
+  onToggleWishlist,
+  categories
 }) => {
   const [activeTab, setActiveTab] = useState(selectedCategory || 'all');
+  const [dynCategories, setDynCategories] = useState<CategoryItem[]>(categories || []);
+
+  useEffect(() => {
+    if (categories && categories.length > 0) {
+      setDynCategories(categories);
+    } else {
+      fetchCategories().then(({ data }) => {
+        if (data) setDynCategories(data);
+      }).catch(() => {});
+    }
+  }, [categories]);
 
   React.useEffect(() => {
     if (selectedCategory) {
@@ -288,7 +302,12 @@ export const StoreExperienceSection: React.FC<StoreExperienceSectionProps> = ({
 
   const filteredProducts = activeTab === 'all' 
     ? allProductsList 
-    : allProductsList.filter(p => p.category === activeTab);
+    : allProductsList.filter(p => p.category === activeTab || p.category?.toLowerCase() === activeTab.toLowerCase());
+
+  const categoryTabs = [
+    { label: "All Collections", key: "all" },
+    ...dynCategories.map(c => ({ label: c.title, key: c.slug }))
+  ];
 
   return (
     <div className="w-full bg-[#FAF8F5] text-[#221C18] overflow-hidden">
@@ -377,13 +396,7 @@ export const StoreExperienceSection: React.FC<StoreExperienceSectionProps> = ({
           </div>
 
           <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-1 pt-1 -mx-4 px-4 sm:mx-0 sm:px-0">
-            {[
-              { label: "All Collections", key: "all" },
-              { label: "Casual Co-Ords", key: "casual-wear" },
-              { label: "Festive Anarkalis", key: "festive-wear" },
-              { label: "Wedding Troussau", key: "wedding-collection" },
-              { label: "Unstitched Silks", key: "unstitched-material" }
-            ].map((tab, idx) => (
+            {categoryTabs.map((tab, idx) => (
               <motion.button
                 key={tab.key}
                 onClick={() => setActiveTab(tab.key)}
@@ -445,61 +458,65 @@ export const StoreExperienceSection: React.FC<StoreExperienceSectionProps> = ({
         )}
       </section>
 
-      {/* 3. Category Tiles */}
-      <section className="bg-white border-y border-[#EAE2D5] py-12 sm:py-16">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <motion.div 
-            className="text-center max-w-2xl mx-auto mb-10 sm:mb-12"
-            initial={{ opacity: 0, y: 24 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true, amount: 0.3 }}
-            transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
-          >
-            <span className="text-[9.5px] sm:text-[10px] font-jakarta font-semibold uppercase tracking-[0.28em] text-[#9B2242] block mb-1.5">
-              THE ATELIER CATALOG
-            </span>
-            <h2 className="font-tenor text-2xl sm:text-3xl lg:text-4xl font-normal text-[#1A1412] tracking-wide">
-              Explore By Curated Category
-            </h2>
-            <p className="font-jakarta text-xs sm:text-sm text-[#736557] mt-2 font-normal">
-              Discover timeless silhouettes tailored from pure handloom weaves, festive ensembles, and bridal troussaus.
-            </p>
-          </motion.div>
+      {/* 3. Category Tiles (Admin-Added Only) */}
+      {dynCategories.length > 0 && (
+        <section className="bg-white border-y border-[#EAE2D5] py-12 sm:py-16">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <motion.div 
+              className="text-center max-w-2xl mx-auto mb-10 sm:mb-12"
+              initial={{ opacity: 0, y: 24 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true, amount: 0.3 }}
+              transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
+            >
+              <span className="text-[9.5px] sm:text-[10px] font-jakarta font-semibold uppercase tracking-[0.28em] text-[#9B2242] block mb-1.5">
+                THE ATELIER CATALOG
+              </span>
+              <h2 className="font-tenor text-2xl sm:text-3xl lg:text-4xl font-normal text-[#1A1412] tracking-wide">
+                Explore By Curated Category
+              </h2>
+              <p className="font-jakarta text-xs sm:text-sm text-[#736557] mt-2 font-normal">
+                Discover timeless silhouettes tailored from pure handloom weaves, festive ensembles, and bridal troussaus.
+              </p>
+            </motion.div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-6 lg:gap-8 max-w-5xl mx-auto">
-            {CATEGORY_TILES.map((cat, idx) => (
-              <motion.div
-                key={cat.slug}
-                onClick={() => onSelectCategory(cat.slug)}
-                initial={{ opacity: 0, y: 30 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true, amount: 0.2 }}
-                transition={{ 
-                  duration: 0.5, 
-                  delay: idx * 0.1,
-                  ease: [0.16, 1, 0.3, 1] 
-                }}
-                whileHover={{ y: -6 }}
-                className="group relative rounded-2xl overflow-hidden aspect-[3/4] cursor-pointer bg-[#ECE4D8] shadow-sm hover:shadow-xl transition-all duration-300 border border-[#E8DFCE]"
-              >
-                <img
-                  src={cat.image}
-                  alt={cat.title}
-                  className="w-full h-full object-cover group-hover:scale-108 transition-transform duration-700"
-                />
-                <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/25 to-transparent flex flex-col justify-end p-5 sm:p-6 text-white">
-                  <h4 className="font-tenor text-base sm:text-lg font-medium leading-snug group-hover:text-[#E2B755] transition-colors">
-                    {cat.title}
-                  </h4>
-                  <span className="font-jakarta text-xs text-white/75 mt-1 tracking-wider">
-                    {cat.count}
-                  </span>
-                </div>
-              </motion.div>
-            ))}
+            <div className={`grid grid-cols-1 sm:grid-cols-2 ${dynCategories.length >= 3 ? 'md:grid-cols-3 lg:grid-cols-4' : ''} gap-4 sm:gap-6 lg:gap-8 max-w-6xl mx-auto`}>
+              {dynCategories.map((cat, idx) => (
+                <motion.div
+                  key={cat.id || cat.slug}
+                  onClick={() => onSelectCategory(cat.slug)}
+                  initial={{ opacity: 0, y: 30 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  viewport={{ once: true, amount: 0.2 }}
+                  transition={{ 
+                    duration: 0.5, 
+                    delay: idx * 0.1,
+                    ease: [0.16, 1, 0.3, 1] 
+                  }}
+                  whileHover={{ y: -6 }}
+                  className="group relative rounded-2xl overflow-hidden aspect-[3/4] cursor-pointer bg-[#ECE4D8] shadow-sm hover:shadow-xl transition-all duration-300 border border-[#E8DFCE]"
+                >
+                  <img
+                    src={cat.image || '/images/royal_blue_anarkali_1788292199640.jpg'}
+                    alt={cat.title}
+                    className="w-full h-full object-cover group-hover:scale-108 transition-transform duration-700"
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/25 to-transparent flex flex-col justify-end p-5 sm:p-6 text-white">
+                    <h4 className="font-tenor text-base sm:text-lg font-medium leading-snug group-hover:text-[#E2B755] transition-colors">
+                      {cat.title}
+                    </h4>
+                    {cat.count && (
+                      <span className="font-jakarta text-xs text-white/75 mt-1 tracking-wider">
+                        {cat.count}
+                      </span>
+                    )}
+                  </div>
+                </motion.div>
+              ))}
+            </div>
           </div>
-        </div>
-      </section>
+        </section>
+      )}
 
       {/* 4. Atelier Craftsmanship Banner */}
       <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 sm:py-16">

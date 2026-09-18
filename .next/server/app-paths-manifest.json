@@ -1,1 +1,20 @@
-{}
+{
+  "/_not-found/page": "app/_not-found/page.js",
+  "/page": "app/page.js",
+  "/product/page": "app/product/page.js",
+  "/products/detail/page": "app/products/detail/page.js",
+  "/products/page": "app/products/page.js",
+  "/admin/banners/page": "app/admin/banners/page.js",
+  "/admin/customers/page": "app/admin/customers/page.js",
+  "/admin/coupons/page": "app/admin/coupons/page.js",
+  "/admin/categories/page": "app/admin/categories/page.js",
+  "/admin/orders/page": "app/admin/orders/page.js",
+  "/admin/products/edit/page": "app/admin/products/edit/page.js",
+  "/admin/inquiries/page": "app/admin/inquiries/page.js",
+  "/admin/products/new/page": "app/admin/products/new/page.js",
+  "/admin/settings/page": "app/admin/settings/page.js",
+  "/admin/signup/page": "app/admin/signup/page.js",
+  "/admin/products/page": "app/admin/products/page.js",
+  "/admin/login/page": "app/admin/login/page.js",
+  "/admin/page": "app/admin/page.js"
+}

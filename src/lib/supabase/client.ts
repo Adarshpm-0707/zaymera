@@ -37,3 +37,24 @@ export const supabase = createClient(
     },
   }
 );
+
+const serviceRoleKey =
+  process.env.NEXT_PUBLIC_SUPABASE_SERVICE_ROLE_KEY ||
+  process.env.SUPABASE_SERVICE_ROLE_KEY ||
+  '';
+
+export const isSupabaseAdminConfigured = Boolean(
+  supabaseUrl &&
+  serviceRoleKey &&
+  supabaseUrl !== PLACEHOLDER_URL &&
+  serviceRoleKey !== 'your-service-role-key-here'
+);
+
+export const supabaseAdmin = isSupabaseAdminConfigured
+  ? createClient(supabaseUrl, serviceRoleKey, {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false,
+      },
+    })
+  : null;

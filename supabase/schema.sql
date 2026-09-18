@@ -186,53 +186,64 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO anon, authen
 ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON ROUTINES TO anon, authenticated, service_role;
 
 -- ─────────────────────────────────────────
--- 10. STORAGE BUCKETS & POLICIES
+-- 10. STORAGE BUCKETS & POLICIES (Safe Execution)
 -- ─────────────────────────────────────────
-INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
-VALUES
-  ('product-images',  'product-images',  TRUE, 10485760, ARRAY['image/jpeg','image/jpg','image/png','image/webp','image/gif']),
-  ('category-images', 'category-images', TRUE, 10485760, ARRAY['image/jpeg','image/jpg','image/png','image/webp','image/gif']),
-  ('banner-images',   'banner-images',   TRUE, 10485760, ARRAY['image/jpeg','image/jpg','image/png','image/webp','image/gif'])
-ON CONFLICT (id) DO UPDATE SET public = TRUE;
+DO $$
+BEGIN
+  INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+  VALUES
+    ('product-images',  'product-images',  TRUE, 10485760, ARRAY['image/jpeg','image/jpg','image/png','image/webp','image/gif']),
+    ('category-images', 'category-images', TRUE, 10485760, ARRAY['image/jpeg','image/jpg','image/png','image/webp','image/gif']),
+    ('banner-images',   'banner-images',   TRUE, 10485760, ARRAY['image/jpeg','image/jpg','image/png','image/webp','image/gif'])
+  ON CONFLICT (id) DO UPDATE SET public = TRUE;
+EXCEPTION WHEN OTHERS THEN
+  RAISE NOTICE 'Bucket setup notice: %', SQLERRM;
+END $$;
 
 -- Product images policies
-DROP POLICY IF EXISTS "Public select product-images" ON storage.objects;
-CREATE POLICY "Public select product-images" ON storage.objects FOR SELECT USING (bucket_id = 'product-images');
-
-DROP POLICY IF EXISTS "Public insert product-images" ON storage.objects;
-CREATE POLICY "Public insert product-images" ON storage.objects FOR INSERT WITH CHECK (bucket_id = 'product-images');
-
-DROP POLICY IF EXISTS "Public update product-images" ON storage.objects;
-CREATE POLICY "Public update product-images" ON storage.objects FOR UPDATE USING (bucket_id = 'product-images');
-
-DROP POLICY IF EXISTS "Public delete product-images" ON storage.objects;
-CREATE POLICY "Public delete product-images" ON storage.objects FOR DELETE USING (bucket_id = 'product-images');
+DO $$
+BEGIN
+  DROP POLICY IF EXISTS "Public select product-images" ON storage.objects;
+  CREATE POLICY "Public select product-images" ON storage.objects FOR SELECT USING (bucket_id = 'product-images');
+  DROP POLICY IF EXISTS "Public insert product-images" ON storage.objects;
+  CREATE POLICY "Public insert product-images" ON storage.objects FOR INSERT WITH CHECK (bucket_id = 'product-images');
+  DROP POLICY IF EXISTS "Public update product-images" ON storage.objects;
+  CREATE POLICY "Public update product-images" ON storage.objects FOR UPDATE USING (bucket_id = 'product-images');
+  DROP POLICY IF EXISTS "Public delete product-images" ON storage.objects;
+  CREATE POLICY "Public delete product-images" ON storage.objects FOR DELETE USING (bucket_id = 'product-images');
+EXCEPTION WHEN OTHERS THEN
+  RAISE NOTICE 'product-images policies notice: %', SQLERRM;
+END $$;
 
 -- Category images policies
-DROP POLICY IF EXISTS "Public select category-images" ON storage.objects;
-CREATE POLICY "Public select category-images" ON storage.objects FOR SELECT USING (bucket_id = 'category-images');
-
-DROP POLICY IF EXISTS "Public insert category-images" ON storage.objects;
-CREATE POLICY "Public insert category-images" ON storage.objects FOR INSERT WITH CHECK (bucket_id = 'category-images');
-
-DROP POLICY IF EXISTS "Public update category-images" ON storage.objects;
-CREATE POLICY "Public update category-images" ON storage.objects FOR UPDATE USING (bucket_id = 'category-images');
-
-DROP POLICY IF EXISTS "Public delete category-images" ON storage.objects;
-CREATE POLICY "Public delete category-images" ON storage.objects FOR DELETE USING (bucket_id = 'category-images');
+DO $$
+BEGIN
+  DROP POLICY IF EXISTS "Public select category-images" ON storage.objects;
+  CREATE POLICY "Public select category-images" ON storage.objects FOR SELECT USING (bucket_id = 'category-images');
+  DROP POLICY IF EXISTS "Public insert category-images" ON storage.objects;
+  CREATE POLICY "Public insert category-images" ON storage.objects FOR INSERT WITH CHECK (bucket_id = 'category-images');
+  DROP POLICY IF EXISTS "Public update category-images" ON storage.objects;
+  CREATE POLICY "Public update category-images" ON storage.objects FOR UPDATE USING (bucket_id = 'category-images');
+  DROP POLICY IF EXISTS "Public delete category-images" ON storage.objects;
+  CREATE POLICY "Public delete category-images" ON storage.objects FOR DELETE USING (bucket_id = 'category-images');
+EXCEPTION WHEN OTHERS THEN
+  RAISE NOTICE 'category-images policies notice: %', SQLERRM;
+END $$;
 
 -- Banner images policies
-DROP POLICY IF EXISTS "Public select banner-images" ON storage.objects;
-CREATE POLICY "Public select banner-images" ON storage.objects FOR SELECT USING (bucket_id = 'banner-images');
-
-DROP POLICY IF EXISTS "Public insert banner-images" ON storage.objects;
-CREATE POLICY "Public insert banner-images" ON storage.objects FOR INSERT WITH CHECK (bucket_id = 'banner-images');
-
-DROP POLICY IF EXISTS "Public update banner-images" ON storage.objects;
-CREATE POLICY "Public update banner-images" ON storage.objects FOR UPDATE USING (bucket_id = 'banner-images');
-
-DROP POLICY IF EXISTS "Public delete banner-images" ON storage.objects;
-CREATE POLICY "Public delete banner-images" ON storage.objects FOR DELETE USING (bucket_id = 'banner-images');
+DO $$
+BEGIN
+  DROP POLICY IF EXISTS "Public select banner-images" ON storage.objects;
+  CREATE POLICY "Public select banner-images" ON storage.objects FOR SELECT USING (bucket_id = 'banner-images');
+  DROP POLICY IF EXISTS "Public insert banner-images" ON storage.objects;
+  CREATE POLICY "Public insert banner-images" ON storage.objects FOR INSERT WITH CHECK (bucket_id = 'banner-images');
+  DROP POLICY IF EXISTS "Public update banner-images" ON storage.objects;
+  CREATE POLICY "Public update banner-images" ON storage.objects FOR UPDATE USING (bucket_id = 'banner-images');
+  DROP POLICY IF EXISTS "Public delete banner-images" ON storage.objects;
+  CREATE POLICY "Public delete banner-images" ON storage.objects FOR DELETE USING (bucket_id = 'banner-images');
+EXCEPTION WHEN OTHERS THEN
+  RAISE NOTICE 'banner-images policies notice: %', SQLERRM;
+END $$;
 
 -- ─────────────────────────────────────────
 -- 11. RELOAD SCHEMA CACHE

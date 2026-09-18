@@ -19,6 +19,7 @@ import {
 import { NAV_CATEGORIES, circleLogoImg } from '@/constants/catalog';
 import { WhatsAppIcon } from '@/components/icons/WhatsAppIcon';
 import { SITE_CONFIG } from '@/constants/siteConfig';
+import { fetchCategories, CategoryItem } from '@/lib/supabase/services';
 
 interface HeaderProps {
   onOpenCart: () => void;
@@ -31,6 +32,7 @@ interface HeaderProps {
   onOpenTrackOrder: () => void;
   onOpenSearch?: () => void;
   onOpenAuth?: () => void;
+  categories?: CategoryItem[];
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -43,10 +45,23 @@ export const Header: React.FC<HeaderProps> = ({
   isMegaMenuOpen,
   onOpenTrackOrder,
   onOpenSearch,
-  onOpenAuth
+  onOpenAuth,
+  categories
 }) => {
   const router = useRouter();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [mobileCategoriesOpen, setMobileCategoriesOpen] = useState(false);
+  const [dynCategories, setDynCategories] = useState<CategoryItem[]>(categories || []);
+
+  useEffect(() => {
+    if (categories && categories.length > 0) {
+      setDynCategories(categories);
+    } else {
+      fetchCategories().then(({ data }) => {
+        if (data) setDynCategories(data);
+      }).catch(() => {});
+    }
+  }, [categories]);
 
   // Prevent background scroll when mobile drawer is open
   useEffect(() => {
@@ -180,17 +195,7 @@ export const Header: React.FC<HeaderProps> = ({
                 </button>
               )}
 
-              {/* WhatsApp Concierge Fast Action (Desktop) */}
-              <a
-                href={`https://wa.me/${SITE_CONFIG.conciergePhone.replace(/[^0-9]/g, '') || '917306115950'}?text=${encodeURIComponent('Hello Zaymera Stylist, I would like to inquire about couture designs.')}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="hidden xl:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[#25D366]/10 hover:bg-[#25D366]/20 border border-[#25D366]/30 text-[#128C7E] text-[11px] font-semibold transition-all shadow-xs"
-                title={`Chat on WhatsApp (${SITE_CONFIG.conciergePhone})`}
-              >
-                <WhatsAppIcon className="w-3.5 h-3.5 text-[#25D366]" />
-                <span>{SITE_CONFIG.conciergePhone}</span>
-              </a>
+        
 
               {/* Account / Login Button (Visible on sm+ screens, in mobile drawer on small screens) */}
               {onOpenAuth && (
@@ -290,6 +295,41 @@ export const Header: React.FC<HeaderProps> = ({
               {/* Category Links List */}
               <div className="space-y-1 pt-1">
                 {NAV_CATEGORIES.map((item) => {
+                  if (item.slug === 'all') {
+                    return (
+                      <div key={item.name} className="space-y-1">
+                        <button
+                          onClick={() => setMobileCategoriesOpen(!mobileCategoriesOpen)}
+                          className="w-full text-left py-2.5 px-3.5 rounded-xl text-xs sm:text-sm font-sans-clean font-medium text-[#2B231D] hover:bg-[#FAF4EA] hover:text-[#9B2242] active:bg-[#F5EDE0] flex items-center justify-between transition-colors cursor-pointer border border-transparent hover:border-[#E8DFC8]"
+                        >
+                          <span className="tracking-wide uppercase">{item.name}</span>
+                          <ChevronDown className={`w-4 h-4 text-[#8C7A6B] transition-transform duration-200 ${mobileCategoriesOpen ? 'rotate-180 text-[#9B2242]' : ''}`} />
+                        </button>
+                        {mobileCategoriesOpen && (
+                          <div className="pl-3 pr-2 py-1.5 space-y-1 bg-[#FAF6EE] rounded-xl border border-[#EBE3D5] my-1">
+                            {dynCategories.length > 0 ? (
+                              dynCategories.map(cat => (
+                                <button
+                                  key={cat.id || cat.slug}
+                                  onClick={() => {
+                                    onSelectCategory(cat.slug);
+                                    setMobileMenuOpen(false);
+                                  }}
+                                  className="w-full text-left py-2 px-3 text-xs font-medium text-[#4A3E34] hover:text-[#9B2242] flex items-center justify-between rounded-lg hover:bg-white/60 cursor-pointer"
+                                >
+                                  <span>{cat.title}</span>
+                                  {cat.count && <span className="text-[10px] text-[#8C7A6B]">{cat.count}</span>}
+                                </button>
+                              ))
+                            ) : (
+                              <span className="text-xs text-[#8C7A6B] py-2 px-3 block">No collections added yet</span>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  }
+
                   const href = getHrefForSlug(item.slug);
 
                   if (href) {

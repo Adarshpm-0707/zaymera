@@ -124,7 +124,7 @@ export const HeroMinimal: React.FC<HeroMinimalProps> = ({
             </button>
 
             <Link
-              href="/products?category=festive-wear"
+              href="/products"
               prefetch={true}
               className="px-6 py-3.5 sm:px-7 sm:py-4 rounded-xl bg-white/10 hover:bg-white/20 backdrop-blur-md border border-white/25 text-white text-xs sm:text-sm font-medium tracking-wider uppercase transition-all active:scale-95 cursor-pointer inline-flex items-center"
             >

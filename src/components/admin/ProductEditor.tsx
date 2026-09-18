@@ -52,15 +52,6 @@ const DEFAULT_SIZES = [
   { size: 'Free Size', inStock: true, enabled: false },
 ];
 
-const HARDCODED_CATEGORIES = [
-  { id: 'casual-wear',         title: 'Casual Co-Ord Sets',   slug: 'casual-wear'         },
-  { id: 'festive-wear',        title: 'Festive Anarkalis',     slug: 'festive-wear'        },
-  { id: 'wedding-collection',  title: 'Wedding & Ceremonial',  slug: 'wedding-collection'  },
-  { id: 'unstitched-material', title: 'Unstitched Silks',      slug: 'unstitched-material' },
-  { id: 'tops',                title: 'Tops & Tunics',         slug: 'tops'                },
-  { id: 'top-dupatta',         title: 'Top and Dupatta',       slug: 'top-dupatta'         },
-  { id: 'customized',          title: 'Customized Atelier',    slug: 'customized'          },
-];
 
 interface ImageSlot {
   url: string;
@@ -83,25 +74,23 @@ function ProductEditorContent() {
   const [successMessage, setSuccessMessage]     = useState('');
   const [mobileTab, setMobileTab]               = useState<'form' | 'preview'>('form');
 
-  // Dynamic categories
-  const [categories, setCategories] = useState<CategoryItem[]>(HARDCODED_CATEGORIES as any);
+  // Dynamic categories — loaded exclusively from admin / Supabase
+  const [categories, setCategories] = useState<CategoryItem[]>([]);
 
   useEffect(() => {
     fetchCategories().then(({ data }) => {
-      if (data && data.length > 0) {
-        // Merge: custom cats first, then hardcoded fallbacks that don't already exist
-        const merged = [
-          ...data,
-          ...HARDCODED_CATEGORIES.filter(h => !data.some(d => d.slug === h.slug)) as any
-        ];
-        setCategories(merged);
+      if (data) {
+        setCategories(data);
+        if (!isEditMode && data.length > 0) {
+          setCategory(prev => (prev && data.some(d => d.slug === prev)) ? prev : data[0].slug);
+        }
       }
-    }).catch(() => {/* silent fallback to hardcoded */});
-  }, []);
+    }).catch(() => {/* silent fallback */});
+  }, [isEditMode]);
 
   // ---------- Form State ----------
   const [name,           setName]           = useState('');
-  const [category,       setCategory]       = useState('festive-wear');
+  const [category,       setCategory]       = useState('');
   const [offerPrice,     setOfferPrice]     = useState<number | ''>('');      // selling price
   const [originalPrice,  setOriginalPrice]  = useState<number | ''>('');      // MRP / strikethrough
   const [purchasedPrice, setPurchasedPrice] = useState<number | ''>('');      // cost price (admin only)
@@ -252,7 +241,7 @@ function ProductEditorContent() {
         return;
       }
       setName(data.name || '');
-      setCategory(data.category || 'festive-wear');
+      setCategory(data.category || '');
       setOfferPrice(data.price ?? '');
       setOriginalPrice(data.originalPrice ?? data.price ?? '');
       setPurchasedPrice(data.purchasedPrice ?? '');
@@ -307,6 +296,11 @@ function ProductEditorContent() {
 
     if (!name.trim() || !offerPrice || !primaryImageUrl) {
       alert('Please fill required fields: Product Title, Selling Price, and at least Image 1');
+      return;
+    }
+
+    if (!category.trim()) {
+      alert('Please select or create a collection category for this product.');
       return;
     }
 
@@ -513,20 +507,48 @@ function ProductEditorContent() {
             {/* Category & Tag */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
               <div>
-                <label className="block text-xs font-semibold text-[#6B5E52] uppercase tracking-wider mb-1.5">
-                  Collection / Category *
-                </label>
-                <select
-                  value={category}
-                  onChange={e => setCategory(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-white border border-[#DDD4C5] text-xs text-[#1C1613] focus:outline-none focus:border-[#C5A059] cursor-pointer shadow-xs"
-                >
-                  {categories.map(cat => (
-                    <option key={cat.id} value={cat.slug} className="bg-white text-[#1C1613]">
-                      {cat.title}
-                    </option>
-                  ))}
-                </select>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="block text-xs font-semibold text-[#6B5E52] uppercase tracking-wider">
+                    Collection / Category *
+                  </label>
+                  <Link
+                    href="/admin/categories"
+                    target="_blank"
+                    className="text-[10.5px] text-[#C5A059] hover:text-[#9B2242] font-semibold underline"
+                  >
+                    + Manage Categories
+                  </Link>
+                </div>
+                {categories.length > 0 ? (
+                  <select
+                    value={category}
+                    onChange={e => setCategory(e.target.value)}
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-white border border-[#DDD4C5] text-xs text-[#1C1613] focus:outline-none focus:border-[#C5A059] cursor-pointer shadow-xs"
+                  >
+                    {!category && <option value="">Select a category...</option>}
+                    {/* If editing and the product's saved category is not in active categories, preserve it */}
+                    {category && !categories.some(c => c.slug === category) && (
+                      <option value={category} className="bg-white text-[#1C1613]">
+                        {category} (Existing)
+                      </option>
+                    )}
+                    {categories.map(cat => (
+                      <option key={cat.id || cat.slug} value={cat.slug} className="bg-white text-[#1C1613]">
+                        {cat.title}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <div className="p-2.5 rounded-xl bg-[#FAF6EE] border border-[#EAE1D2] text-xs text-[#7A6C5F] flex items-center justify-between">
+                    <span>No categories found.</span>
+                    <Link
+                      href="/admin/categories"
+                      className="text-[#9B2242] font-bold underline hover:opacity-80"
+                    >
+                      Add Category First →
+                    </Link>
+                  </div>
+                )}
               </div>
 
               <div>

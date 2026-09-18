@@ -18,23 +18,4 @@ export const NAV_CATEGORIES: NavCategory[] = [
   { name: "TRACK ORDER", slug: "track-order" }
 ];
 
-export const CATEGORY_TILES: CategoryTile[] = [
-  {
-    title: "Casual Co-Ord Sets",
-    count: "60+ Styles",
-    image: pinkPolkaImg,
-    slug: "casual-wear"
-  },
-  {
-    title: "Festive Anarkalis & Churidars",
-    count: "140+ Designs",
-    image: royalBlueProductImg,
-    slug: "festive-wear"
-  },
-  {
-    title: "Wedding & Ceremony Troussau",
-    count: "95+ Ensembles",
-    image: ivoryProductImg,
-    slug: "wedding-collection"
-  }
-];
+export const CATEGORY_TILES: CategoryTile[] = [];

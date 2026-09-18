@@ -1,21 +1,35 @@
 'use client';
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { X, ArrowRight, Sparkles } from 'lucide-react';
-import { CATEGORY_TILES } from '@/constants/catalog';
+import { fetchCategories, CategoryItem } from '@/lib/supabase/services';
 
 interface CategoryMegaMenuProps {
   isOpen: boolean;
   onClose: () => void;
   onSelectCategory: (slug: string) => void;
+  categories?: CategoryItem[];
 }
 
 export const CategoryMegaMenu: React.FC<CategoryMegaMenuProps> = ({
   isOpen,
   onClose,
-  onSelectCategory
+  onSelectCategory,
+  categories
 }) => {
+  const [dynCategories, setDynCategories] = useState<CategoryItem[]>(categories || []);
+
+  useEffect(() => {
+    if (categories && categories.length > 0) {
+      setDynCategories(categories);
+    } else {
+      fetchCategories().then(({ data }) => {
+        if (data) setDynCategories(data);
+      }).catch(() => {});
+    }
+  }, [categories]);
+
   if (!isOpen) return null;
 
   return (
@@ -45,41 +59,51 @@ export const CategoryMegaMenu: React.FC<CategoryMegaMenuProps> = ({
           </button>
         </div>
 
-        {/* 3 Prominent Visual Tiles */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 sm:gap-8">
-          {CATEGORY_TILES.map((tile) => (
-            <Link
-              key={tile.slug}
-              href={`/products?category=${tile.slug}`}
-              prefetch={true}
-              onClick={() => {
-                onSelectCategory(tile.slug);
-                onClose();
-              }}
-              className="group relative h-72 sm:h-80 rounded-2xl overflow-hidden cursor-pointer shadow-md hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1 block"
-            >
-              <img
-                src={tile.image}
-                alt={tile.title}
-                className="w-full h-full object-cover object-center group-hover:scale-105 transition-transform duration-700 ease-out"
-              />
-              <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/35 to-transparent" />
-              
-              <div className="absolute bottom-0 left-0 right-0 p-6 text-white flex flex-col justify-end">
-                <span className="text-[10px] uppercase font-bold tracking-widest text-[#E6C280] mb-1">
-                  {tile.count}
-                </span>
-                <h4 className="font-display text-xl sm:text-2xl font-normal leading-snug group-hover:text-[#F3E2C4] transition-colors">
-                  {tile.title}
-                </h4>
-                <div className="mt-3 inline-flex items-center gap-2 text-xs font-semibold tracking-wider uppercase text-white/90 group-hover:text-white transition-colors">
-                  <span>Explore Collection</span>
-                  <ArrowRight className="w-4 h-4 transform group-hover:translate-x-1.5 transition-transform" />
+        {/* Dynamic Visual Tiles (Admin-Added Only) */}
+        {dynCategories.length > 0 ? (
+          <div className={`grid grid-cols-1 sm:grid-cols-2 ${dynCategories.length >= 3 ? 'md:grid-cols-3 lg:grid-cols-4' : ''} gap-6 sm:gap-8`}>
+            {dynCategories.map((tile) => (
+              <Link
+                key={tile.id || tile.slug}
+                href={`/products?category=${encodeURIComponent(tile.slug)}`}
+                prefetch={true}
+                onClick={() => {
+                  onSelectCategory(tile.slug);
+                  onClose();
+                }}
+                className="group relative h-72 sm:h-80 rounded-2xl overflow-hidden cursor-pointer shadow-md hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1 block bg-[#ECE4D8]"
+              >
+                <img
+                  src={tile.image || '/images/royal_blue_anarkali_1788292199640.jpg'}
+                  alt={tile.title}
+                  className="w-full h-full object-cover object-center group-hover:scale-105 transition-transform duration-700 ease-out"
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/35 to-transparent" />
+                
+                <div className="absolute bottom-0 left-0 right-0 p-6 text-white flex flex-col justify-end">
+                  {tile.count && (
+                    <span className="text-[10px] uppercase font-bold tracking-widest text-[#E6C280] mb-1">
+                      {tile.count}
+                    </span>
+                  )}
+                  <h4 className="font-display text-xl sm:text-2xl font-normal leading-snug group-hover:text-[#F3E2C4] transition-colors">
+                    {tile.title}
+                  </h4>
+                  <div className="mt-3 inline-flex items-center gap-2 text-xs font-semibold tracking-wider uppercase text-white/90 group-hover:text-white transition-colors">
+                    <span>Explore Collection</span>
+                    <ArrowRight className="w-4 h-4 transform group-hover:translate-x-1.5 transition-transform" />
+                  </div>
                 </div>
-              </div>
-            </Link>
-          ))}
-        </div>
+              </Link>
+            ))}
+          </div>
+        ) : (
+          <div className="py-12 text-center text-[#7A6C5F] bg-[#FAF8F5] rounded-2xl border border-[#EAE2D5] p-6">
+            <Sparkles className="w-6 h-6 text-[#C5A059] mx-auto mb-2" />
+            <p className="font-display text-lg text-[#221C18]">No collections added yet.</p>
+            <p className="text-xs text-[#8C7A6B] mt-1">Admin added categories will appear here automatically.</p>
+          </div>
+        )}
 
         {/* Bottom Banner */}
         <div className="mt-8 pt-6 border-t border-[#F0EAE1] flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-[#7A6C5F]">
