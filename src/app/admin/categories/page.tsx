@@ -20,7 +20,8 @@ import {
   updateCategory,
   deleteCategory,
   CategoryItem,
-  getInitialCategories
+  getInitialCategories,
+  DEFAULT_CATEGORIES
 } from '@/lib/supabase/services';
 
 export default function AdminCategoriesPage() {

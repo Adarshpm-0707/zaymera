@@ -29,7 +29,7 @@ import {
   UserCheck,
   ArrowRight
 } from 'lucide-react';
-import { isSupabaseConfigured } from '@/lib/supabase/client';
+import { supabase, isSupabaseConfigured } from '@/lib/supabase/client';
 import { circleLogoImg } from '@/constants/catalog';
 
 interface AdminLayoutProps {
@@ -111,27 +111,64 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
   } | null>(null);
   const [isCheckingAuth, setIsCheckingAuth] = useState(true);
 
-  // Read admin session from localStorage
+  // Read admin session from localStorage or active Supabase session
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      try {
-        const raw = localStorage.getItem('zaymera_admin_auth');
-        if (raw) {
-          const parsed = JSON.parse(raw);
-          if (parsed && (parsed.username || parsed.email)) {
-            setAdminAuth(parsed);
-          } else {
-            setAdminAuth(null);
+    let isMounted = true;
+
+    const checkSession = async () => {
+      if (typeof window !== 'undefined') {
+        try {
+          const raw = localStorage.getItem('zaymera_admin_auth');
+          if (raw) {
+            const parsed = JSON.parse(raw);
+            if (parsed && (parsed.username || parsed.email)) {
+              if (isMounted) setAdminAuth(parsed);
+              if (isMounted) setIsCheckingAuth(false);
+              return;
+            }
           }
-        } else {
-          setAdminAuth(null);
+        } catch {
+          // ignore
         }
-      } catch {
-        setAdminAuth(null);
-      } finally {
-        setIsCheckingAuth(false);
+
+        // If local storage is empty, check active Supabase Auth session
+        if (isSupabaseConfigured) {
+          try {
+            const { data: { session } } = await supabase.auth.getSession();
+            if (session?.user && isMounted) {
+              const meta = session.user.user_metadata || {};
+              if (meta.role === 'Administrator' || session.user.email?.includes('admin')) {
+                const adminData = {
+                  username: meta.username || session.user.email?.split('@')[0] || 'Admin',
+                  name: meta.full_name || meta.username || 'Admin',
+                  email: session.user.email,
+                  role: 'Administrator',
+                };
+                setAdminAuth(adminData);
+                try {
+                  localStorage.setItem('zaymera_admin_auth', JSON.stringify(adminData));
+                } catch {}
+                if (isMounted) setIsCheckingAuth(false);
+                return;
+              }
+            }
+          } catch {
+            // ignore
+          }
+        }
+
+        if (isMounted) {
+          setAdminAuth(null);
+          setIsCheckingAuth(false);
+        }
       }
-    }
+    };
+
+    checkSession();
+
+    return () => {
+      isMounted = false;
+    };
   }, [pathname]);
 
   // Close mobile navigation drawer on Escape key press

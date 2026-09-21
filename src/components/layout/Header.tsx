@@ -19,7 +19,7 @@ import {
 import { NAV_CATEGORIES, circleLogoImg } from '@/constants/catalog';
 import { WhatsAppIcon } from '@/components/icons/WhatsAppIcon';
 import { SITE_CONFIG } from '@/constants/siteConfig';
-import { fetchCategories, CategoryItem } from '@/lib/supabase/services';
+import { fetchCategories, CategoryItem, DEFAULT_CATEGORIES } from '@/lib/supabase/services';
 
 interface HeaderProps {
   onOpenCart: () => void;
@@ -421,18 +421,37 @@ export const Header: React.FC<HeaderProps> = ({
               </div>
 
               {/* Bottom Utility Bar */}
-              <div className="pt-3 border-t border-[#EAE2D5] flex items-center justify-between text-xs text-[#8C7A68]">
-                <span className="text-[11px] text-[#A39282]">
-                  ✨ Bespoke Elegance
-                </span>
-                <Link
-                  href="/admin"
-                  onClick={() => setMobileMenuOpen(false)}
-                  className="inline-flex items-center gap-1.5 text-[#9B2242] font-semibold hover:underline text-[11px]"
-                >
-                  <Shield className="w-3.5 h-3.5 text-[#9B2242]" />
-                  <span>Admin Atelier</span>
-                </Link>
+              <div className="pt-3 border-t border-[#EAE2D5] flex flex-col gap-2">
+                <div className="flex items-center justify-between text-xs text-[#8C7A68]">
+                  <span className="text-[11px] text-[#A39282]">
+                    ✨ Bespoke Elegance
+                  </span>
+                  <Link
+                    href="/admin"
+                    onClick={() => setMobileMenuOpen(false)}
+                    className="inline-flex items-center gap-1.5 text-[#9B2242] font-semibold hover:underline text-[11px]"
+                  >
+                    <Shield className="w-3.5 h-3.5 text-[#9B2242]" />
+                    <span>Admin Atelier</span>
+                  </Link>
+                </div>
+                <div className="flex items-center justify-center gap-3 text-[10.5px] text-[#8C7A68] pt-1 border-t border-[#F2ECE1]">
+                  <Link
+                    href="/terms"
+                    onClick={() => setMobileMenuOpen(false)}
+                    className="hover:text-[#9B2242] transition-colors"
+                  >
+                    Terms & Conditions
+                  </Link>
+                  <span className="text-[#D6CBB8]">•</span>
+                  <Link
+                    href="/privacy"
+                    onClick={() => setMobileMenuOpen(false)}
+                    className="hover:text-[#9B2242] transition-colors"
+                  >
+                    Privacy Policy
+                  </Link>
+                </div>
               </div>
 
             </div>

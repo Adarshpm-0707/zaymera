@@ -2,7 +2,13 @@
 
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { User, Session, AuthError } from '@supabase/supabase-js';
-import { supabase, isSupabaseConfigured } from '@/lib/supabase/client';
+import {
+  supabase,
+  isSupabaseConfigured,
+  createCloudUserConfirmed,
+  resolveUserLoginIdentifier,
+  ensureUserEmailConfirmed
+} from '@/lib/supabase/client';
 import { UserProfile } from '@/types';
 
 interface AuthContextType {
@@ -12,7 +18,7 @@ interface AuthContextType {
   loading: boolean;
   isConfigured: boolean;
   signUp: (email: string, password: string, fullName?: string, phone?: string) => Promise<{ error: AuthError | Error | null }>;
-  signIn: (email: string, password: string) => Promise<{ error: AuthError | Error | null }>;
+  signIn: (identifier: string, password: string) => Promise<{ error: AuthError | Error | null }>;
   signOut: () => Promise<void>;
   refreshProfile: () => Promise<void>;
 }
@@ -83,25 +89,29 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     try {
-      const { data, error } = await supabase.auth.signUp({
+      // 1. Create cloud user with email_confirm: true (immediately active on all devices)
+      const { user: newUser, error: createErr } = await createCloudUserConfirmed({
         email,
         password,
-        options: {
-          data: {
-            full_name: fullName || '',
-            phone: phone || ''
-          }
-        }
+        fullName,
+        phone,
+        role: 'customer'
       });
 
-      if (error) return { error };
+      if (createErr) {
+        return { error: createErr };
+      }
 
-      if (data.user && fullName) {
-        await supabase.from('profiles').upsert({
-          id: data.user.id,
-          full_name: fullName,
-          phone: phone || ''
-        });
+      // 2. Immediately sign in on current device so customer is logged in without manual email verification
+      const cleanEmail = email.trim().toLowerCase();
+      const { data: signInData, error: signInErr } = await supabase.auth.signInWithPassword({
+        email: cleanEmail,
+        password
+      });
+
+      if (!signInErr && signInData.session) {
+        setSession(signInData.session);
+        setUser(signInData.session.user);
       }
 
       return { error: null };
@@ -110,7 +120,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const signIn = async (email: string, password: string) => {
+  const signIn = async (identifier: string, password: string) => {
     if (!isSupabaseConfigured) {
       return {
         error: new Error('Supabase is not configured yet. Please add your credentials in .env')
@@ -118,11 +128,31 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     try {
-      const { error } = await supabase.auth.signInWithPassword({
-        email,
+      // Resolve identifier (which can be email, username, or phone number across devices)
+      const resolved = await resolveUserLoginIdentifier(identifier);
+      const targetEmail = resolved?.email || identifier.trim().toLowerCase();
+
+      // Ensure email is confirmed to repair legacy accounts
+      await ensureUserEmailConfirmed(targetEmail);
+
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: targetEmail,
         password
       });
-      return { error };
+
+      if (error) {
+        return { error };
+      }
+
+      if (data.session) {
+        setSession(data.session);
+        setUser(data.user);
+        if (data.user) {
+          fetchProfile(data.user.id);
+        }
+      }
+
+      return { error: null };
     } catch (err: any) {
       return { error: err };
     }

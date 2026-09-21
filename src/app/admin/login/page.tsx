@@ -12,7 +12,7 @@ import {
   CheckCircle2,
   AlertCircle
 } from 'lucide-react';
-import { supabase, isSupabaseConfigured } from '@/lib/supabase/client';
+import { supabase, isSupabaseConfigured, resolveUserLoginIdentifier } from '@/lib/supabase/client';
 import { circleLogoImg } from '@/constants/catalog';
 
 export default function AdminLoginPage() {
@@ -24,17 +24,15 @@ export default function AdminLoginPage() {
   const [errorMsg, setErrorMsg] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
 
-  // If already logged in, redirect to admin dashboard
+  // If already logged in, redirect straight to dashboard
   useEffect(() => {
     if (typeof window !== 'undefined') {
       try {
-        const existingAuth = localStorage.getItem('zaymera_admin_auth');
-        if (existingAuth) {
-          const parsed = JSON.parse(existingAuth);
-          if (parsed && (parsed.username || parsed.email)) {
-            setSuccessMsg(`Welcome back, ${parsed.username || parsed.name || 'Admin'}!`);
-            const timer = setTimeout(() => router.push('/admin'), 600);
-            return () => clearTimeout(timer);
+        const raw = localStorage.getItem('zaymera_admin_auth');
+        if (raw) {
+          const session = JSON.parse(raw);
+          if (session && (session.username || session.email)) {
+            router.replace('/admin');
           }
         }
       } catch {
@@ -45,8 +43,8 @@ export default function AdminLoginPage() {
 
   const saveAdminSession = (userData: {
     username: string;
-    email?: string;
     name?: string;
+    email?: string;
     role?: string;
   }) => {
     if (typeof window !== 'undefined') {
@@ -58,11 +56,11 @@ export default function AdminLoginPage() {
             name: userData.name || userData.username,
             email: userData.email || `${userData.username.toLowerCase()}@zaymera.com`,
             role: userData.role || 'Administrator',
-            loggedInAt: new Date().toISOString()
+            loggedInAt: new Date().toISOString(),
           })
         );
       } catch (e) {
-        console.error('Session save error:', e);
+        console.error('Failed to save admin session:', e);
       }
     }
   };
@@ -83,7 +81,86 @@ export default function AdminLoginPage() {
     }
 
     try {
-      // 1. Check local registered admin storage first
+      // 1. Default master administrative credentials (admin / admin, zaymera / admin, director / admin)
+      const isDefaultAdmin =
+        (input.toLowerCase() === 'admin' && (pass === 'admin' || pass === 'admin123' || pass === 'Atelier2026!Royal')) ||
+        (input.toLowerCase() === 'zaymera' && (pass === 'admin' || pass === 'admin123' || pass === 'zaymera123')) ||
+        (input.toLowerCase() === 'director' && (pass === 'admin' || pass === 'director123')) ||
+        (input.toLowerCase() === 'executive@zaymera.com' && (pass === 'admin' || pass === 'Atelier2026!Royal'));
+
+      if (isDefaultAdmin) {
+        saveAdminSession({
+          username: input,
+          name: input.toUpperCase(),
+          email: `${input.toLowerCase()}@zaymera.com`,
+          role: 'Administrator'
+        });
+        setSuccessMsg(`Welcome, ${input}! Redirecting to Dashboard...`);
+        setTimeout(() => router.push('/admin'), 600);
+        return;
+      }
+
+      // 2. Multi-Device Supabase Cloud Authentication (resolves Username OR Email across all devices)
+      if (isSupabaseConfigured) {
+        const resolved = await resolveUserLoginIdentifier(input);
+        const targetEmail = resolved?.email || (input.includes('@') ? input : null);
+
+        if (targetEmail) {
+          const { data, error } = await supabase.auth.signInWithPassword({
+            email: targetEmail,
+            password: pass,
+          });
+
+          if (!error && data.user) {
+            const resolvedUser = resolved?.user || data.user;
+            const meta = resolvedUser.user_metadata || {};
+            const cleanUser = meta.username || data.user.email?.split('@')[0] || input;
+            const cleanName = meta.full_name || meta.username || cleanUser;
+            const cleanRole = meta.role || 'Administrator';
+
+            saveAdminSession({
+              username: cleanUser,
+              name: cleanName,
+              email: data.user.email,
+              role: cleanRole
+            });
+
+            // Mirror to local device cache for offline resilience
+            if (typeof window !== 'undefined') {
+              try {
+                let list: any[] = [];
+                const raw = localStorage.getItem('zaymera_registered_admins');
+                if (raw) list = JSON.parse(raw) || [];
+                const idx = list.findIndex(
+                  (u: any) =>
+                    u.username?.toLowerCase() === cleanUser.toLowerCase() ||
+                    u.email?.toLowerCase() === data.user.email?.toLowerCase()
+                );
+                const item = {
+                  id: data.user.id,
+                  username: cleanUser,
+                  name: cleanName,
+                  email: data.user.email,
+                  password: pass,
+                  role: cleanRole,
+                  createdAt: new Date().toISOString()
+                };
+                if (idx >= 0) list[idx] = item;
+                else list.push(item);
+                localStorage.setItem('zaymera_registered_admins', JSON.stringify(list));
+              } catch (e) {
+                console.warn('Could not mirror admin locally:', e);
+              }
+            }
+
+            setSuccessMsg(`Welcome, ${cleanName}! Entering Dashboard...`);
+            setTimeout(() => router.push('/admin'), 600);
+            return;
+          }
+        }
+      }
+
+      // 3. Fallback: Check local registered admin storage (for offline or local accounts)
       let matchedRegisteredUser: any = null;
       if (typeof window !== 'undefined') {
         try {
@@ -116,46 +193,7 @@ export default function AdminLoginPage() {
         return;
       }
 
-      // 2. Default master administrative credentials (admin / admin, admin / admin123, zaymera / admin)
-      const isDefaultAdmin =
-        (input.toLowerCase() === 'admin' && (pass === 'admin' || pass === 'admin123' || pass === 'Atelier2026!Royal')) ||
-        (input.toLowerCase() === 'zaymera' && (pass === 'admin' || pass === 'admin123' || pass === 'zaymera123')) ||
-        (input.toLowerCase() === 'director' && (pass === 'admin' || pass === 'director123')) ||
-        (input.toLowerCase() === 'executive@zaymera.com' && (pass === 'admin' || pass === 'Atelier2026!Royal'));
-
-      if (isDefaultAdmin) {
-        saveAdminSession({
-          username: input,
-          name: input.toUpperCase(),
-          email: `${input.toLowerCase()}@zaymera.com`,
-          role: 'Administrator'
-        });
-        setSuccessMsg(`Welcome, ${input}! Redirecting to Dashboard...`);
-        setTimeout(() => router.push('/admin'), 600);
-        return;
-      }
-
-      // 3. Try Supabase Auth if input is an email and Supabase is configured
-      if (input.includes('@') && isSupabaseConfigured) {
-        const { data, error } = await supabase.auth.signInWithPassword({
-          email: input,
-          password: pass,
-        });
-
-        if (!error && data.user) {
-          saveAdminSession({
-            username: input.split('@')[0],
-            name: data.user.user_metadata?.full_name || input.split('@')[0],
-            email: data.user.email,
-            role: data.user.user_metadata?.role || 'Administrator'
-          });
-          setSuccessMsg('Welcome! Entering Dashboard...');
-          setTimeout(() => router.push('/admin'), 600);
-          return;
-        }
-      }
-
-      setErrorMsg('Invalid username or password.');
+      setErrorMsg('Invalid username or password. Please verify your credentials.');
     } catch (err: any) {
       setErrorMsg(err.message || 'Authentication failed. Please verify credentials.');
     } finally {

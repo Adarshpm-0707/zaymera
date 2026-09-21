@@ -13,7 +13,7 @@ import {
   CheckCircle2,
   AlertCircle
 } from 'lucide-react';
-import { supabase, isSupabaseConfigured } from '@/lib/supabase/client';
+import { supabase, isSupabaseConfigured, createCloudUserConfirmed } from '@/lib/supabase/client';
 import { circleLogoImg } from '@/constants/catalog';
 
 export default function AdminSignupPage() {
@@ -61,75 +61,76 @@ export default function AdminSignupPage() {
     setLoading(true);
 
     try {
-      // 1. Save new admin to local registered admins list
-      if (typeof window !== 'undefined') {
-        let registeredList: any[] = [];
-        try {
-          const raw = localStorage.getItem('zaymera_registered_admins');
-          if (raw) registeredList = JSON.parse(raw) || [];
-        } catch {
-          registeredList = [];
-        }
+      // 1. Save new admin to Supabase Cloud Auth (available to ALL devices)
+      const { user: cloudUser, error: cloudErr } = await createCloudUserConfirmed({
+        email: cleanEmail,
+        password: cleanPass,
+        username: cleanUsername,
+        fullName: cleanUsername,
+        role: 'Administrator',
+      });
 
-        // Check if username or email is already registered
-        const existing = registeredList.find(
-          (u) =>
-            u.username?.toLowerCase() === cleanUsername ||
-            u.email?.toLowerCase() === cleanEmail
-        );
-
-        if (existing) {
-          setErrorMsg('An account with this username or email already exists. Please login instead.');
-          setLoading(false);
-          return;
-        }
-
-        const newAdmin = {
-          id: `adm_${Date.now()}`,
-          username: cleanUsername,
-          name: cleanUsername,
-          email: cleanEmail,
-          password: cleanPass,
-          role: 'Administrator',
-          createdAt: new Date().toISOString()
-        };
-
-        registeredList.push(newAdmin);
-        localStorage.setItem('zaymera_registered_admins', JSON.stringify(registeredList));
-
-        // Save active session
-        localStorage.setItem(
-          'zaymera_admin_auth',
-          JSON.stringify({
-            username: cleanUsername,
-            name: cleanUsername,
-            email: cleanEmail,
-            role: 'Administrator',
-            loggedInAt: new Date().toISOString()
-          })
-        );
+      if (cloudErr) {
+        setErrorMsg(cloudErr.message || 'Failed to register administrator account in cloud database.');
+        setLoading(false);
+        return;
       }
 
-      // 2. Also register in Supabase Auth if available
+      // 2. Establish authenticated session on current device
       if (isSupabaseConfigured) {
         try {
-          await supabase.auth.signUp({
+          await supabase.auth.signInWithPassword({
             email: cleanEmail,
             password: cleanPass,
-            options: {
-              data: {
-                username: cleanUsername,
-                full_name: cleanUsername,
-                role: 'Administrator',
-              },
-            },
           });
         } catch {
           // non-blocking
         }
       }
 
-      setSuccessMsg(`Admin account "${cleanUsername}" registered successfully! Entering Dashboard...`);
+      // 3. Mirror active session & local cache for offline resiliency
+      if (typeof window !== 'undefined') {
+        try {
+          // Active admin session
+          localStorage.setItem(
+            'zaymera_admin_auth',
+            JSON.stringify({
+              username: cleanUsername,
+              name: cleanUsername,
+              email: cleanEmail,
+              role: 'Administrator',
+              loggedInAt: new Date().toISOString()
+            })
+          );
+
+          // Local registered admins list
+          let registeredList: any[] = [];
+          const raw = localStorage.getItem('zaymera_registered_admins');
+          if (raw) registeredList = JSON.parse(raw) || [];
+          const newAdmin = {
+            id: cloudUser?.id || `adm_${Date.now()}`,
+            username: cleanUsername,
+            name: cleanUsername,
+            email: cleanEmail,
+            password: cleanPass,
+            role: 'Administrator',
+            createdAt: new Date().toISOString()
+          };
+          const existingIdx = registeredList.findIndex(
+            (u) => u.username?.toLowerCase() === cleanUsername || u.email?.toLowerCase() === cleanEmail
+          );
+          if (existingIdx >= 0) {
+            registeredList[existingIdx] = newAdmin;
+          } else {
+            registeredList.push(newAdmin);
+          }
+          localStorage.setItem('zaymera_registered_admins', JSON.stringify(registeredList));
+        } catch (e) {
+          console.warn('Could not write local storage cache:', e);
+        }
+      }
+
+      setSuccessMsg(`Admin account "${cleanUsername}" registered successfully across all devices! Entering Dashboard...`);
       setTimeout(() => {
         router.push('/admin');
       }, 700);

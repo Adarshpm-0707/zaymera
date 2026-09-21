@@ -1,5 +1,9 @@
 @import "tailwindcss";
+@source "../components/**/*.{js,ts,jsx,tsx}";
+@source "../app/**/*.{js,ts,jsx,tsx}";
+@source "../../src/**/*.{js,ts,jsx,tsx}";
 @import "./admin/admin.css";
+@import "../components/legal/legal.css";
 
 @theme {
   --font-sans: var(--font-sans, 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif);

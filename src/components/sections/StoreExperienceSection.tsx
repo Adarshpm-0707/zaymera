@@ -9,7 +9,7 @@ import { PRODUCTS_CATALOG, circleLogoImg } from '@/constants/catalog';
 import { SITE_CONFIG } from '@/constants/siteConfig';
 import { Footer } from '@/components/layout/Footer';
 import { ProductItem } from '@/types';
-import { fetchCategories, CategoryItem } from '@/lib/supabase/services';
+import { fetchCategories, CategoryItem, DEFAULT_CATEGORIES } from '@/lib/supabase/services';
 
 interface StoreExperienceSectionProps {
   products?: ProductItem[];
@@ -300,13 +300,24 @@ export const StoreExperienceSection: React.FC<StoreExperienceSectionProps> = ({
 
   const allProductsList = products ?? PRODUCTS_CATALOG;
 
+  const displayCategories = dynCategories || [];
+
   const filteredProducts = activeTab === 'all' 
     ? allProductsList 
-    : allProductsList.filter(p => p.category === activeTab || p.category?.toLowerCase() === activeTab.toLowerCase());
+    : allProductsList.filter(p => {
+        const cat = (p.category || '').toLowerCase();
+        const target = activeTab.toLowerCase();
+        if (cat === target) return true;
+        if (target === 'kurta-sets' && (cat.startsWith('kurta') || cat.includes('suit'))) return true;
+        if (target.startsWith('kurta') && cat.startsWith('kurta')) return true;
+        if (target === 'anarkali' && cat.includes('anarkali')) return true;
+        if (target === 'coord-sets' && (cat.includes('polka') || cat.includes('coord'))) return true;
+        return false;
+      });
 
   const categoryTabs = [
     { label: "All Collections", key: "all" },
-    ...dynCategories.map(c => ({ label: c.title, key: c.slug }))
+    ...displayCategories.map(c => ({ label: c.title, key: c.slug }))
   ];
 
   return (
@@ -458,30 +469,53 @@ export const StoreExperienceSection: React.FC<StoreExperienceSectionProps> = ({
         )}
       </section>
 
-      {/* 3. Category Tiles (Admin-Added Only) */}
-      {dynCategories.length > 0 && (
-        <section className="bg-white border-y border-[#EAE2D5] py-12 sm:py-16">
+      {/* 3. Category Section — Show ONLY Admin-Added Categories */}
+      {displayCategories.length > 0 && (
+        <section id="category-section" className="bg-white border-y border-[#EAE2D5] py-12 sm:py-16">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <motion.div 
-              className="text-center max-w-2xl mx-auto mb-10 sm:mb-12"
+              className="flex flex-col sm:flex-row sm:items-end justify-between mb-8 sm:mb-12 gap-4"
               initial={{ opacity: 0, y: 24 }}
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true, amount: 0.3 }}
               transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
             >
-              <span className="text-[9.5px] sm:text-[10px] font-jakarta font-semibold uppercase tracking-[0.28em] text-[#9B2242] block mb-1.5">
-                THE ATELIER CATALOG
-              </span>
-              <h2 className="font-tenor text-2xl sm:text-3xl lg:text-4xl font-normal text-[#1A1412] tracking-wide">
-                Explore By Curated Category
-              </h2>
-              <p className="font-jakarta text-xs sm:text-sm text-[#736557] mt-2 font-normal">
-                Discover timeless silhouettes tailored from pure handloom weaves, festive ensembles, and bridal troussaus.
-              </p>
+              <div>
+                <div className="inline-flex items-center gap-2 rounded-full border border-[#D4AF37]/50 bg-[#FAF4EA] px-3 py-1 mb-2.5">
+                  <Sparkles className="w-3.5 h-3.5 text-[#9B2242]" />
+                  <span className="text-[9px] sm:text-[9.5px] font-jakarta font-semibold uppercase tracking-[0.25em] text-[#9B2242]">
+                    The Atelier Catalog • {displayCategories.length} {displayCategories.length === 1 ? 'Collection' : 'Collections'}
+                  </span>
+                </div>
+                <h2 className="font-tenor text-2xl sm:text-3xl lg:text-4xl font-normal text-[#1A1412] tracking-wide">
+                  Explore All Categories & Collections
+                </h2>
+                <p className="font-jakarta text-xs sm:text-sm text-[#736557] mt-1.5 font-normal max-w-xl leading-relaxed">
+                  Discover timeless silhouettes tailored from pure handloom weaves, festive ensembles, and bridal troussaus.
+                </p>
+              </div>
+
+              <Link
+                href="/products"
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-[#D2C5B3] bg-[#FAF8F5] text-xs font-semibold text-[#221C18] hover:border-[#9B2242] hover:text-[#9B2242] transition-colors self-start sm:self-auto cursor-pointer shrink-0 shadow-sm"
+              >
+                <span>View All in Catalog</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </Link>
             </motion.div>
 
-            <div className={`grid grid-cols-1 sm:grid-cols-2 ${dynCategories.length >= 3 ? 'md:grid-cols-3 lg:grid-cols-4' : ''} gap-4 sm:gap-6 lg:gap-8 max-w-6xl mx-auto`}>
-              {dynCategories.map((cat, idx) => (
+            <div className={`grid gap-4 sm:gap-6 mx-auto ${
+              displayCategories.length === 1
+                ? 'grid-cols-1 max-w-sm'
+                : displayCategories.length === 2
+                ? 'grid-cols-2 max-w-2xl'
+                : displayCategories.length === 3
+                ? 'grid-cols-1 sm:grid-cols-3 max-w-4xl'
+                : displayCategories.length === 4
+                ? 'grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 max-w-5xl'
+                : 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 max-w-7xl'
+            }`}>
+              {displayCategories.map((cat, idx) => (
                 <motion.div
                   key={cat.id || cat.slug}
                   onClick={() => onSelectCategory(cat.slug)}
@@ -490,7 +524,7 @@ export const StoreExperienceSection: React.FC<StoreExperienceSectionProps> = ({
                   viewport={{ once: true, amount: 0.2 }}
                   transition={{ 
                     duration: 0.5, 
-                    delay: idx * 0.1,
+                    delay: idx * 0.06,
                     ease: [0.16, 1, 0.3, 1] 
                   }}
                   whileHover={{ y: -6 }}
@@ -501,15 +535,19 @@ export const StoreExperienceSection: React.FC<StoreExperienceSectionProps> = ({
                     alt={cat.title}
                     className="w-full h-full object-cover group-hover:scale-108 transition-transform duration-700"
                   />
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/25 to-transparent flex flex-col justify-end p-5 sm:p-6 text-white">
-                    <h4 className="font-tenor text-base sm:text-lg font-medium leading-snug group-hover:text-[#E2B755] transition-colors">
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/25 to-transparent flex flex-col justify-end p-3.5 sm:p-4 text-white">
+                    <h4 className="font-tenor text-xs sm:text-sm lg:text-base font-medium leading-snug group-hover:text-[#E2B755] transition-colors line-clamp-2">
                       {cat.title}
                     </h4>
                     {cat.count && (
-                      <span className="font-jakarta text-xs text-white/75 mt-1 tracking-wider">
+                      <span className="font-jakarta text-[10px] sm:text-[11px] text-white/75 mt-0.5 sm:mt-1 tracking-wider">
                         {cat.count}
                       </span>
                     )}
+                    <div className="mt-2 inline-flex items-center gap-1 text-[10px] sm:text-[11px] font-semibold text-[#E2B755] opacity-0 group-hover:opacity-100 transition-opacity">
+                      <span>Explore</span>
+                      <ArrowRight className="w-3 h-3 transform group-hover:translate-x-1 transition-transform" />
+                    </div>
                   </div>
                 </motion.div>
               ))}

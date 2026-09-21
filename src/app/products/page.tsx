@@ -14,10 +14,9 @@ import {
   Heart,
   SlidersHorizontal,
   ChevronDown,
-  RefreshCw,
-  Store
+  RefreshCw
 } from 'lucide-react';
-import { fetchProducts, getInitialProducts, getLocalProducts, fetchCategories, CategoryItem } from '@/lib/supabase/services';
+import { fetchProducts, getInitialProducts, getLocalProducts, fetchCategories, CategoryItem, DEFAULT_CATEGORIES } from '@/lib/supabase/services';
 import { ProductItem, SlideData } from '@/types';
 import { Header } from '@/components/layout/Header';
 import { CategoryMegaMenu } from '@/components/layout/CategoryMegaMenu';
@@ -39,10 +38,10 @@ function ProductsContent() {
   const [loading, setLoading]   = useState(true);
 
   // Dynamic categories — loaded exclusively from admin
+  const [dynCategories, setDynCategories] = useState<CategoryItem[]>([]);
   const [categoryList, setCategoryList] = useState<{ label: string; slug: string }[]>([
     { label: 'All Ensembles', slug: 'all' }
   ]);
-  const [dynCategories, setDynCategories] = useState<CategoryItem[]>([]);
 
   useEffect(() => {
     fetchCategories().then(({ data }) => {
@@ -129,9 +128,16 @@ function ProductsContent() {
 
   // Filter & Sort Logic
   const filteredProducts = products.filter(p => {
-    const matchesCategory = selectedCategory === 'all' || 
-      p.category === selectedCategory || 
-      p.category?.toLowerCase() === selectedCategory.toLowerCase();
+    const cat = (p.category || '').toLowerCase();
+    const target = selectedCategory.toLowerCase();
+    const matchesCategory = target === 'all' || 
+      cat === target || 
+      (target === 'kurta-sets' && (cat.startsWith('kurta') || cat.includes('suit'))) ||
+      (target.startsWith('kurta') && cat.startsWith('kurta')) ||
+      (target === 'anarkali' && cat.includes('anarkali')) ||
+      (target === 'coord-sets' && (cat.includes('polka') || cat.includes('coord'))) ||
+      (target === 'sarees' && cat.includes('saree')) ||
+      (target === 'bridal-wear' && (cat.includes('bridal') || cat.includes('festive')));
     const matchesSearch =
       !searchQuery.trim() ||
       p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -179,48 +185,7 @@ function ProductsContent() {
         />
       </div>
 
-      {/* 3. Hero / Breadcrumbs Banner */}
-      <div className="bg-[#1F1915] text-white py-10 sm:py-14 border-b border-[#3A2F28] relative overflow-hidden">
-        <div className="absolute top-0 right-0 w-96 h-96 bg-[#C5A059]/10 rounded-full blur-3xl pointer-events-none" />
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
-          
-          <div className="flex items-center gap-2 text-xs text-[#A89887] uppercase tracking-wider mb-2">
-            <Link href="/" className="hover:text-white transition-colors">Home</Link>
-            <span>/</span>
-            <span className="text-[#C5A059]">Atelier Products Catalog</span>
-          </div>
-
-          <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
-            <div>
-              <div className="inline-flex items-center gap-2 rounded-full border border-[#D4AF37]/50 bg-[#FAF4EA]/10 px-3 py-1 mb-3">
-                <Sparkles className="w-3.5 h-3.5 text-[#E2B755]" />
-                <span className="text-[9.5px] font-semibold uppercase tracking-[0.25em] text-[#E2B755]">
-                  Haute Couture & Ready-to-Wear
-                </span>
-              </div>
-              <h1 className="font-display text-3xl sm:text-4xl lg:text-5xl font-normal tracking-wide text-white">
-                The Complete Catalog
-              </h1>
-              <p className="text-xs sm:text-sm text-white/75 max-w-xl mt-2 font-normal leading-relaxed">
-                Discover artisan handcrafted Anarkalis, pure handloom silks, casual crepe co-ord sets, and ceremonial bridal troussaus.
-              </p>
-            </div>
-
-            <div className="flex items-center gap-2">
-              <Link
-                href="/admin"
-                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-full bg-white/10 hover:bg-white/20 border border-white/20 text-xs font-medium text-white transition-all"
-              >
-                <Store className="w-3.5 h-3.5 text-[#E2B755]" />
-                <span>Admin Atelier Portal</span>
-              </Link>
-            </div>
-          </div>
-
-        </div>
-      </div>
-
-      {/* 4. Products Filter & Grid Section */}
+      {/* Products Filter & Grid Section */}
       <main className="flex-1 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-12 w-full">
         
         {/* Filter Controls Strip */}

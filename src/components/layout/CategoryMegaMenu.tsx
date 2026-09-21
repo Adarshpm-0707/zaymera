@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { X, ArrowRight, Sparkles } from 'lucide-react';
-import { fetchCategories, CategoryItem } from '@/lib/supabase/services';
+import { fetchCategories, CategoryItem, DEFAULT_CATEGORIES } from '@/lib/supabase/services';
 
 interface CategoryMegaMenuProps {
   isOpen: boolean;

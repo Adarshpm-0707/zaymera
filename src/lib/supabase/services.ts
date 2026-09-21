@@ -285,7 +285,7 @@ export function getInitialProducts(): ProductItem[] {
 }
 
 export function getInitialCategories(): CategoryItem[] {
-  return [];
+  return DEFAULT_CATEGORIES;
 }
 
 export function getInitialOrders(): any[] {
@@ -1136,40 +1136,56 @@ export async function updateInquiryStatus(inquiryId: string, status: string): Pr
 // 4. CATEGORIES
 // ─────────────────────────────────────────────────────────────────────────────
 
-const DEFAULT_CATEGORIES: CategoryItem[] = [];
-
-const MOCK_CATEGORY_IDS = new Set(['cat-1', 'cat-2', 'cat-3', 'cat-4', 'cat-5', 'cat-6']);
-
-function checkAndPurgeOldMockCategories() {
-  if (typeof window === 'undefined') return;
-  try {
-    const purgeKey = 'zaymera_categories_purged_v2';
-    if (!localStorage.getItem(purgeKey)) {
-      const existing = lsGet<CategoryItem[]>(LS.CATEGORIES, []);
-      const clean = existing.filter(c => !MOCK_CATEGORY_IDS.has(c.id));
-      localStorage.setItem(LS.CATEGORIES, JSON.stringify(clean));
-      localStorage.setItem(purgeKey, 'true');
-      cachedCategories = clean;
-    }
-  } catch { /* ignore */ }
-}
+export const DEFAULT_CATEGORIES: CategoryItem[] = [];
 
 export function getLocalCategories(): CategoryItem[] {
   if (typeof window === 'undefined') return [];
-  checkAndPurgeOldMockCategories();
-  const cats = lsGet<CategoryItem[]>(LS.CATEGORIES, DEFAULT_CATEGORIES);
-  return cats.filter(c => !MOCK_CATEGORY_IDS.has(c.id));
+  const cats = lsGet<CategoryItem[]>(LS.CATEGORIES, []);
+  return cats || [];
 }
 
 export function saveLocalCategories(cats: CategoryItem[]) {
-  const clean = cats.filter(c => !MOCK_CATEGORY_IDS.has(c.id));
-  cachedCategories = clean;
-  lsSet(LS.CATEGORIES, clean);
+  cachedCategories = cats;
+  lsSet(LS.CATEGORIES, cats);
+}
+
+async function syncCategoriesToCloud(cats: CategoryItem[]): Promise<void> {
+  if (!supabase) return;
+  try {
+    const payload = JSON.stringify(cats, null, 2);
+    const body = typeof Buffer !== 'undefined' ? Buffer.from(payload) : new Blob([payload], { type: 'application/json' });
+    await supabase.storage
+      .from('category-images')
+      .upload('categories.json', body, {
+        contentType: 'application/json',
+        upsert: true
+      });
+  } catch (err) {
+    console.warn('Could not sync categories to cloud storage:', err);
+  }
+}
+
+async function fetchCategoriesFromCloud(): Promise<CategoryItem[] | null> {
+  if (!supabase) return null;
+  try {
+    const { data, error } = await supabase.storage
+      .from('category-images')
+      .download('categories.json');
+    if (!error && data) {
+      const text = await data.text();
+      const parsed = JSON.parse(text);
+      if (Array.isArray(parsed)) {
+        return parsed;
+      }
+    }
+  } catch {
+    // non-blocking
+  }
+  return null;
 }
 
 export async function fetchCategories(): Promise<{ data: CategoryItem[]; error: any }> {
-  checkAndPurgeOldMockCategories();
-  if (cachedCategories !== null) {
+  if (cachedCategories !== null && cachedCategories.length > 0) {
     _refreshCategoriesFromDb().catch(() => {});
     return { data: cachedCategories, error: null };
   }
@@ -1177,50 +1193,50 @@ export async function fetchCategories(): Promise<{ data: CategoryItem[]; error: 
 }
 
 async function _refreshCategoriesFromDb(): Promise<{ data: CategoryItem[]; error: any }> {
-  const local = getLocalCategories();
-  if (!isTableAvailable('categories')) {
-    cachedCategories = local;
-    return { data: local, error: null };
-  }
-
+  // 1. Fetch from Supabase Cloud Storage (authoritative across all devices for admin-added categories)
   try {
-    const result = await withTimeout(
-      supabase.from('categories').select('*').order('sort_order', { ascending: true }) as any,
-      4000,
-      { data: null, error: 'timeout' }
-    );
-    if (result.error || result.data === null) {
-      if (isMissingTableError(result.error)) {
+    const cloudCategories = await fetchCategoriesFromCloud();
+    if (cloudCategories !== null) {
+      cachedCategories = cloudCategories;
+      saveLocalCategories(cloudCategories);
+      return { data: cloudCategories, error: null };
+    }
+  } catch {}
+
+  // 2. Also try SQL table if available
+  if (isTableAvailable('categories')) {
+    try {
+      const result = await withTimeout(
+        supabase.from('categories').select('*').order('sort_order', { ascending: true }) as any,
+        4000,
+        { data: null, error: 'timeout' }
+      );
+      if (result.data && result.data.length > 0) {
+        const formatted: CategoryItem[] = result.data.map((c: any) => ({
+          id: c.id, title: c.title, slug: c.slug, count: c.count,
+          image: c.image, description: c.description, featured: c.featured
+        }));
+        cachedCategories = formatted;
+        saveLocalCategories(formatted);
+        return { data: formatted, error: null };
+      } else if (isMissingTableError(result.error)) {
         markTableUnavailable('categories');
       }
-      cachedCategories = local;
-      return { data: local, error: null };
+    } catch {
+      // non-blocking
     }
-
-    const formatted: CategoryItem[] = result.data.map((c: any) => ({
-      id: c.id, title: c.title, slug: c.slug, count: c.count,
-      image: c.image, description: c.description, featured: c.featured
-    }));
-
-    // Single source of truth: DB-sourced + any local-only categories not yet in DB (excluding mocks)
-    const merged = [
-      ...formatted,
-      ...local.filter(lc => !formatted.some(fc => fc.id === lc.id || fc.slug === lc.slug))
-    ].filter(c => !MOCK_CATEGORY_IDS.has(c.id));
-
-    cachedCategories = merged;
-    saveLocalCategories(merged);
-    return { data: merged, error: null };
-  } catch {
-    cachedCategories = local;
-    return { data: local, error: null };
   }
+
+  // 3. Fallback to local storage (only admin-added categories)
+  const local = getLocalCategories();
+  cachedCategories = local;
+  return { data: local, error: null };
 }
 
 export async function createCategory(
   cat: Omit<CategoryItem, 'id'> & { imageFile?: File | null }
 ): Promise<{ success: boolean; data: CategoryItem }> {
-  let imageUrl = cat.image || '';
+  let imageUrl = cat.image || '/images/royal_blue_anarkali_1788292199640.jpg';
 
   // Upload image file if provided
   if (cat.imageFile) {
@@ -1232,14 +1248,16 @@ export async function createCategory(
     id:          'cat-' + Date.now(),
     title:       cat.title,
     slug:        cat.slug || cat.title.toLowerCase().replace(/\s+/g, '-'),
-    count:       cat.count || '0 Styles',
+    count:       cat.count || '40+ Styles',
     image:       imageUrl,
     description: cat.description || '',
     featured:    cat.featured ?? false
   };
 
   const list = getLocalCategories();
-  saveLocalCategories([...list, newCat]);
+  const updated = [...list, newCat];
+  saveLocalCategories(updated);
+  syncCategoriesToCloud(updated).catch(() => {});
 
   if (isTableAvailable('categories')) {
     try {
@@ -1268,6 +1286,7 @@ export async function updateCategory(id: string, updates: Partial<CategoryItem> 
   const list = getLocalCategories();
   const updated = list.map(c => c.id === id ? { ...c, ...updates } : c);
   saveLocalCategories(updated);
+  syncCategoriesToCloud(updated).catch(() => {});
 
   if (isTableAvailable('categories')) {
     try {
@@ -1291,7 +1310,9 @@ export async function updateCategory(id: string, updates: Partial<CategoryItem> 
 
 export async function deleteCategory(id: string): Promise<{ success: boolean }> {
   const list = getLocalCategories();
-  saveLocalCategories(list.filter(c => c.id !== id));
+  const updated = list.filter(c => c.id !== id);
+  saveLocalCategories(updated);
+  syncCategoriesToCloud(updated).catch(() => {});
 
   if (isTableAvailable('categories')) {
     try {
@@ -1327,8 +1348,43 @@ export function saveLocalCustomers(custs: CustomerItem[]) {
 }
 
 export async function fetchCustomers(): Promise<{ data: CustomerItem[]; error: any }> {
-  if (cachedCustomers && cachedCustomers.length > 0) return { data: cachedCustomers, error: null };
-  const custs = getLocalCustomers();
+  let custs = [...getLocalCustomers()];
+
+  // If supabaseAdmin is configured, augment with registered patrons from Cloud Auth
+  if (supabaseAdmin) {
+    try {
+      const { data: userList } = await supabaseAdmin.auth.admin.listUsers({ page: 1, perPage: 1000 });
+      if (userList?.users) {
+        for (const u of userList.users) {
+          const role = u.user_metadata?.role;
+          if (role === 'Administrator') continue;
+          const email = u.email || '';
+          if (!email) continue;
+          const exists = custs.some(c => c.email.toLowerCase() === email.toLowerCase());
+          if (!exists) {
+            const joined = u.created_at ? u.created_at.split('T')[0] : new Date().toISOString().split('T')[0];
+            const name = (u.user_metadata?.full_name as string) || (u.user_metadata?.username as string) || email.split('@')[0];
+            const phone = (u.user_metadata?.phone as string) || '+91 98000 00000';
+            custs.push({
+              id: u.id,
+              name,
+              email,
+              phone,
+              city: 'Online Atelier Client',
+              totalSpent: 0,
+              ordersCount: 0,
+              tier: (u.user_metadata?.tier as any) || 'New',
+              joinedDate: joined,
+              isRegistered: true
+            });
+          }
+        }
+      }
+    } catch (err) {
+      console.warn('Could not fetch cloud auth customers:', err);
+    }
+  }
+
   cachedCustomers = custs;
   return { data: custs, error: null };
 }

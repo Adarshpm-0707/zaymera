@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { SLIDES_DATA } from '@/constants/slides';
 import { PRODUCTS_CATALOG } from '@/constants/catalog';
 import { SlideData, ProductItem } from '@/types';
-import { fetchProducts, getInitialProducts, getLocalProducts, fetchCategories, CategoryItem } from '@/lib/supabase/services';
+import { fetchProducts, getInitialProducts, getLocalProducts, fetchCategories, CategoryItem, DEFAULT_CATEGORIES } from '@/lib/supabase/services';
 
 // Modular Layout Components
 import { Header } from '@/components/layout/Header';

@@ -89,8 +89,13 @@ export const Footer: React.FC = () => {
           <Link href="/products?filter=new-arrivals" className="hover:text-[#9B2242] transition-colors">
             New Arrivals
           </Link>
+          <Link href="/terms" className="hover:text-[#9B2242] transition-colors">
+            Terms & Conditions
+          </Link>
           <span className="text-[#D6CBB8] text-[9px]">•</span>
-          <span className="hover:text-[#9B2242] transition-colors cursor-pointer">Terms & Conditions</span>
+          <Link href="/privacy" className="hover:text-[#9B2242] transition-colors">
+            Privacy Policy
+          </Link>
           <span className="text-[#D6CBB8] text-[9px]">•</span>
           <span className="hover:text-[#9B2242] transition-colors cursor-pointer">Shipping & Customs</span>
           <span className="text-[#D6CBB8] text-[9px]">•</span>
