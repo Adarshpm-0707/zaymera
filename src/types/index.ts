@@ -50,6 +50,7 @@ export interface ProductItem {
   fabric: string;
   work: string;
   inStock: boolean;
+  stock?: number;          // units available in inventory (<= 5 shows urgent low stock, 0 = out of stock)
   sizes?: ProductSizeOption[];
 }
 

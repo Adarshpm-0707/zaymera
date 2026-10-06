@@ -113,6 +113,7 @@ function ProductDetailContent() {
   const [isSizeGuideOpen, setIsSizeGuideOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<'description' | 'specifications' | 'care' | 'shipping'>('description');
   const [isCartOpen, setIsCartOpen] = useState(false);
+  const [cartInitialStep, setCartInitialStep] = useState<'cart' | 'checkout'>('cart');
   const [isWishlistOpen, setIsWishlistOpen] = useState(false);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [isAuthOpen, setIsAuthOpen] = useState(false);
@@ -234,6 +235,10 @@ function ProductDetailContent() {
   const discountPercent = Math.round(((originalPrice - price) / originalPrice) * 100);
   const savingsAmount = originalPrice - price;
 
+  const stockVal = product?.stock !== undefined ? product.stock : (product?.inStock ? 10 : 0);
+  const isOutOfStock = stockVal <= 0 || product?.inStock === false;
+  const isLowStock = !isOutOfStock && stockVal <= 5;
+
   const isWishlisted = product ? wishlistIds.includes(product.id) : false;
 
   const availableSizes = product?.sizes && product.sizes.length > 0
@@ -248,21 +253,23 @@ function ProductDetailContent() {
 
   // Handle Add to Cart
   const handleAddToCart = () => {
-    if (!product) return;
+    if (!product || isOutOfStock) return;
     for (let i = 0; i < quantity; i++) {
       addToCart(product, selectedSize);
     }
     setIsAddedToCart(true);
+    setCartInitialStep('cart');
     setIsCartOpen(true);
     setTimeout(() => setIsAddedToCart(false), 2000);
   };
 
   // Handle Buy Now
   const handleBuyNow = () => {
-    if (!product) return;
+    if (!product || isOutOfStock) return;
     for (let i = 0; i < quantity; i++) {
       addToCart(product, selectedSize);
     }
+    setCartInitialStep('checkout');
     setIsCartOpen(true);
   };
 
@@ -597,9 +604,19 @@ function ProductDetailContent() {
               <span className="text-xs text-[#8C7A68]">
                 Based on <a href="#reviews" className="underline hover:text-[#9B2242]">{reviews.length + 124} verified artisan reviews</a>
               </span>
-              <span className="text-xs font-semibold text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-200">
-                ● In Stock & Ready to Dispatch
-              </span>
+              {isOutOfStock ? (
+                <span className="text-xs font-bold text-[#DC2626] bg-[#FEE2E2] px-2.5 py-0.5 rounded-full border border-[#FECACA]">
+                  ● Out of Stock (Sold Out)
+                </span>
+              ) : isLowStock ? (
+                <span className="text-xs font-bold text-[#B45309] bg-[#FEF3C7] px-2.5 py-0.5 rounded-full border border-[#FDE68A] animate-pulse">
+                  ⚠️ Only {stockVal} Left in Stock!
+                </span>
+              ) : (
+                <span className="text-xs font-semibold text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-200">
+                  ● In Stock & Ready to Dispatch
+                </span>
+              )}
             </div>
 
             {/* Pricing Section */}
@@ -697,7 +714,7 @@ function ProductDetailContent() {
                   <button
                     type="button"
                     onClick={() => setQuantity(Math.max(1, quantity - 1))}
-                    disabled={quantity <= 1}
+                    disabled={quantity <= 1 || isOutOfStock}
                     className="w-9 h-9 flex items-center justify-center text-[#5C4D41] hover:bg-[#FAF4EA] disabled:opacity-30 disabled:hover:bg-transparent cursor-pointer"
                   >
                     <Minus className="w-3.5 h-3.5" />
@@ -707,8 +724,8 @@ function ProductDetailContent() {
                   </span>
                   <button
                     type="button"
-                    onClick={() => setQuantity(Math.min(10, quantity + 1))}
-                    disabled={quantity >= 10}
+                    onClick={() => setQuantity(Math.min(stockVal > 0 ? stockVal : 10, quantity + 1))}
+                    disabled={quantity >= (stockVal > 0 ? stockVal : 10) || isOutOfStock}
                     className="w-9 h-9 flex items-center justify-center text-[#5C4D41] hover:bg-[#FAF4EA] disabled:opacity-30 disabled:hover:bg-transparent cursor-pointer"
                   >
                     <Plus className="w-3.5 h-3.5" />
@@ -716,34 +733,42 @@ function ProductDetailContent() {
                 </div>
               </div>
 
-              {/* Action Buttons: Add to Cart & Buy Now */}
+              {/* Action Buttons: Add to Cart & Buy Now or Sold Out */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
-                <button
-                  type="button"
-                  onClick={handleAddToCart}
-                  className="w-full py-4 px-6 rounded-xl bg-[#9B2242] hover:bg-[#7E1B35] text-white font-bold text-xs uppercase tracking-wider shadow-md hover:shadow-lg transition-all active:scale-[0.98] cursor-pointer flex items-center justify-center gap-2"
-                >
-                  {isAddedToCart ? (
-                    <>
-                      <CheckCircle2 className="w-4 h-4 text-emerald-300" />
-                      <span>Added to Bag!</span>
-                    </>
-                  ) : (
-                    <>
-                      <ShoppingCart className="w-4 h-4" />
-                      <span>Add to Bag</span>
-                    </>
-                  )}
-                </button>
+                {isOutOfStock ? (
+                  <div className="col-span-1 sm:col-span-2 py-4 px-6 rounded-xl bg-[#F5ECE1] border border-[#E2D4C0] text-[#8C7667] font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 select-none cursor-not-allowed shadow-inner">
+                    <span>This Creation is Currently Sold Out</span>
+                  </div>
+                ) : (
+                  <>
+                    <button
+                      type="button"
+                      onClick={handleAddToCart}
+                      className="w-full py-4 px-6 rounded-xl bg-[#9B2242] hover:bg-[#7E1B35] text-white font-bold text-xs uppercase tracking-wider shadow-md hover:shadow-lg transition-all active:scale-[0.98] cursor-pointer flex items-center justify-center gap-2"
+                    >
+                      {isAddedToCart ? (
+                        <>
+                          <CheckCircle2 className="w-4 h-4 text-emerald-300" />
+                          <span>Added to Bag!</span>
+                        </>
+                      ) : (
+                        <>
+                          <ShoppingCart className="w-4 h-4" />
+                          <span>Add to Bag</span>
+                        </>
+                      )}
+                    </button>
 
-                <button
-                  type="button"
-                  onClick={handleBuyNow}
-                  className="w-full py-4 px-6 rounded-xl bg-[#1F1916] hover:bg-[#342B25] text-white font-bold text-xs uppercase tracking-wider shadow-md hover:shadow-lg transition-all active:scale-[0.98] cursor-pointer flex items-center justify-center gap-2"
-                >
-                  <Lock className="w-4 h-4 text-amber-400" />
-                  <span>Buy Now • ₹{(price * quantity).toLocaleString()}</span>
-                </button>
+                    <button
+                      type="button"
+                      onClick={handleBuyNow}
+                      className="w-full py-4 px-6 rounded-xl bg-[#1F1916] hover:bg-[#342B25] text-white font-bold text-xs uppercase tracking-wider shadow-md hover:shadow-lg transition-all active:scale-[0.98] cursor-pointer flex items-center justify-center gap-2"
+                    >
+                      <Lock className="w-4 h-4 text-amber-400" />
+                      <span>Buy Now • ₹{(price * quantity).toLocaleString()}</span>
+                    </button>
+                  </>
+                )}
               </div>
 
               {/* WhatsApp Concierge Button */}
@@ -1255,6 +1280,7 @@ function ProductDetailContent() {
       {/* ── 9. Modals & Drawers ── */}
       <CartDrawer
         isOpen={isCartOpen}
+        initialStep={cartInitialStep}
         onClose={() => setIsCartOpen(false)}
         cartItems={cartItems}
         onRemoveItem={removeCartItem}

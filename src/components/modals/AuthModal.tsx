@@ -1,7 +1,8 @@
 'use client';
 
 import React, { useState } from 'react';
-import { X, Lock, Mail, User, Phone, Loader2, AlertCircle, CheckCircle2 } from 'lucide-react';
+import Link from 'next/link';
+import { X, Lock, Mail, User, Phone, Loader2, AlertCircle, CheckCircle2, Package } from 'lucide-react';
 import { circleLogoImg } from '@/constants/catalog';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/lib/supabase/client';
@@ -171,13 +172,22 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
               )}
             </div>
 
+            <Link
+              href="/orders"
+              onClick={onClose}
+              className="w-full py-3 rounded-xl bg-[#9B2242] hover:bg-[#831B36] text-white text-xs font-bold uppercase tracking-widest transition-all shadow-md active:scale-95 cursor-pointer flex items-center justify-center gap-2"
+            >
+              <Package className="w-4 h-4" />
+              <span>View My Orders & Purchases</span>
+            </Link>
+
             <button
               type="button"
               onClick={async () => {
                 await signOut();
                 onClose();
               }}
-              className="w-full py-3 rounded-xl bg-[#221C18] hover:bg-black text-white text-xs font-bold uppercase tracking-widest transition-all shadow-md active:scale-95 cursor-pointer"
+              className="w-full py-3 rounded-xl bg-white hover:bg-[#FAF8F5] border border-[#DCD1BF] text-[#221C18] text-xs font-bold uppercase tracking-widest transition-all shadow-xs active:scale-95 cursor-pointer"
             >
               Sign Out
             </button>

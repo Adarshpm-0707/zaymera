@@ -27,7 +27,8 @@ import {
   ExternalLink,
   AlertCircle,
   Database,
-  CloudUpload
+  CloudUpload,
+  Boxes
 } from 'lucide-react';
 import {
   createProduct,
@@ -94,6 +95,7 @@ function ProductEditorContent() {
   const [offerPrice,     setOfferPrice]     = useState<number | ''>('');      // selling price
   const [originalPrice,  setOriginalPrice]  = useState<number | ''>('');      // MRP / strikethrough
   const [purchasedPrice, setPurchasedPrice] = useState<number | ''>('');      // cost price (admin only)
+  const [stock,          setStock]          = useState<number>(10);            // inventory quantity
   const [tag,            setTag]            = useState('New Arrival');
   const [fabric,         setFabric]         = useState('');
   const [work,           setWork]           = useState('');
@@ -245,6 +247,7 @@ function ProductEditorContent() {
       setOfferPrice(data.price ?? '');
       setOriginalPrice(data.originalPrice ?? data.price ?? '');
       setPurchasedPrice(data.purchasedPrice ?? '');
+      setStock(data.stock !== undefined && data.stock !== null ? Number(data.stock) : (data.inStock === false ? 0 : 10));
       setTag(data.tag || 'New Arrival');
       setFabric(data.fabric || '');
       setWork(data.work || '');
@@ -317,6 +320,8 @@ function ProductEditorContent() {
         .filter(url => url && !url.startsWith('blob:'));
 
       const cleanPrimary = allImages[0] || (primaryImageUrl.startsWith('blob:') ? '' : primaryImageUrl);
+      const parsedStock = Math.max(0, Math.floor(Number(stock) || 0));
+      const computedInStock = parsedStock > 0 && inStock;
 
       if (isEditMode && editId) {
         const res = await updateProduct(editId, {
@@ -331,8 +336,9 @@ function ProductEditorContent() {
           description:    description.trim(),
           fabric:         fabric.trim() || 'Haute Couture Handloom',
           work:           work.trim()   || 'Artisan Handcrafted',
-          inStock,
-          sizes:          activeSizes.length > 0 ? activeSizes : [{ size: 'Free Size', inStock: true }]
+          inStock:        computedInStock,
+          stock:          parsedStock,
+          sizes:          activeSizes.length > 0 ? activeSizes : [{ size: 'Free Size', inStock: computedInStock }]
         });
 
         if (res.savedLocallyOnly) {
@@ -354,8 +360,9 @@ function ProductEditorContent() {
           description:    description.trim(),
           fabric:         fabric.trim() || 'Haute Couture Handloom',
           work:           work.trim()   || 'Artisan Handcrafted',
-          inStock,
-          sizes:          activeSizes.length > 0 ? activeSizes : [{ size: 'Free Size', inStock: true }]
+          inStock:        computedInStock,
+          stock:          parsedStock,
+          sizes:          activeSizes.length > 0 ? activeSizes : [{ size: 'Free Size', inStock: computedInStock }]
         });
 
         if (res.savedLocallyOnly) {
@@ -914,18 +921,117 @@ function ProductEditorContent() {
                 </button>
               </div>
             </div>
+          </div>
 
-            {/* Stock Master Toggle */}
+          {/* ── CARD 5: Stock & Inventory Control ── */}
+          <div className="p-4 sm:p-6 rounded-3xl bg-white border border-[#EAE2D5] shadow-xs space-y-4">
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <h3 className="font-display text-sm sm:text-base text-[#1C1613] tracking-wide flex items-center gap-2">
+                <Boxes className="w-4 h-4 text-[#936718]" />
+                <span>Stock &amp; Inventory Management</span>
+              </h3>
+              <div className="flex items-center gap-2">
+                {stock <= 0 ? (
+                  <span className="px-2.5 py-1 rounded-full text-[10px] sm:text-[10.5px] font-bold uppercase tracking-wider bg-[#FEF2F2] text-[#B91C1C] border border-[#FCA5A5] flex items-center gap-1.5">
+                    <span className="w-1.5 h-1.5 rounded-full bg-[#DC2626]" />
+                    Out of Stock (0)
+                  </span>
+                ) : stock <= 5 ? (
+                  <span className="px-2.5 py-1 rounded-full text-[10px] sm:text-[10.5px] font-bold uppercase tracking-wider bg-[#FFFBEB] text-[#B45309] border border-[#FCD34D] flex items-center gap-1.5">
+                    <span className="w-1.5 h-1.5 rounded-full bg-[#F59E0B] animate-pulse" />
+                    Low Stock Alert ({stock} Left)
+                  </span>
+                ) : (
+                  <span className="px-2.5 py-1 rounded-full text-[10px] sm:text-[10.5px] font-bold uppercase tracking-wider bg-[#ECFDF5] text-[#15803D] border border-[#86EFAC] flex items-center gap-1.5">
+                    <span className="w-1.5 h-1.5 rounded-full bg-[#16A34A]" />
+                    In Stock ({stock} Units)
+                  </span>
+                )}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-center">
+              <div>
+                <label className="block text-xs font-semibold text-[#6B5E52] uppercase tracking-wider mb-1.5">
+                  Available Quantity in Stock *
+                </label>
+                <div className="relative flex items-center">
+                  <input
+                    type="number"
+                    min={0}
+                    value={stock}
+                    onChange={e => {
+                      const val = Math.max(0, parseInt(e.target.value, 10) || 0);
+                      setStock(val);
+                      if (val === 0) setInStock(false);
+                      else setInStock(true);
+                    }}
+                    placeholder="e.g. 10"
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-white border border-[#DDD4C5] text-sm font-bold text-[#1C1613] placeholder-[#8A7B6E] focus:outline-none focus:border-[#C5A059] shadow-xs"
+                  />
+                  <span className="absolute right-3 text-xs text-[#8A7B6E] font-medium">units</span>
+                </div>
+              </div>
+
+              {/* Quick Preset Buttons */}
+              <div>
+                <label className="block text-xs font-semibold text-[#6B5E52] uppercase tracking-wider mb-1.5">
+                  Quick Stock Presets
+                </label>
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  {[
+                    { label: 'Sold Out (0)', val: 0 },
+                    { label: 'Low (3)', val: 3 },
+                    { label: '10 Units', val: 10 },
+                    { label: '25 Units', val: 25 },
+                    { label: '50 Units', val: 50 },
+                  ].map(preset => (
+                    <button
+                      key={preset.val}
+                      type="button"
+                      onClick={() => {
+                        setStock(preset.val);
+                        setInStock(preset.val > 0);
+                      }}
+                      className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold border transition-all cursor-pointer ${
+                        stock === preset.val
+                          ? 'bg-[#1C1613] text-white border-[#1C1613] shadow-xs'
+                          : 'bg-[#FAF7F2] text-[#6B5E52] border-[#EAE2D5] hover:border-[#C5A059]'
+                      }`}
+                    >
+                      {preset.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Explanatory rules for customer side */}
+            <div className="p-3.5 rounded-2xl bg-[#FAF8F5] border border-[#EAE2D5] text-[11px] text-[#7A6959] space-y-1">
+              <p className="font-semibold text-[#2B231D] flex items-center gap-1.5">
+                <AlertCircle className="w-3.5 h-3.5 text-[#936718]" />
+                Customer Storefront Stock Rules:
+              </p>
+              <ul className="list-disc list-inside space-y-0.5 text-[10.5px]">
+                <li><strong>Stock ≤ 5</strong>: Storefront product cards will automatically display an urgent <span className="text-[#B45309] font-bold">Only {stock} Left!</span> banner.</li>
+                <li><strong>Stock = 0</strong>: Product card is blocked with <span className="text-[#DC2626] font-bold">OUT OF STOCK</span> overlay and Add to Cart is disabled.</li>
+              </ul>
+            </div>
+
+            {/* Master Toggle */}
             <div className="flex items-center gap-3 pt-2 border-t border-[#F0E9DF]">
               <input
                 type="checkbox"
                 id="masterInStock"
-                checked={inStock}
-                onChange={e => setInStock(e.target.checked)}
+                checked={inStock && stock > 0}
+                onChange={e => {
+                  setInStock(e.target.checked);
+                  if (e.target.checked && stock === 0) setStock(10);
+                }}
                 className="w-4 h-4 rounded text-[#C5A059] focus:ring-[#C5A059] cursor-pointer"
               />
               <label htmlFor="masterInStock" className="text-xs font-semibold text-[#1C1613] cursor-pointer">
-                Publish as Available in Stock
+                Publish as Available in Stock (active status)
               </label>
             </div>
           </div>

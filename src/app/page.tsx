@@ -87,6 +87,7 @@ export default function Home() {
 
   // Modal & Navigation States
   const [isCartOpen, setIsCartOpen] = useState(false);
+  const [cartInitialStep, setCartInitialStep] = useState<'cart' | 'checkout'>('cart');
   const [isWishlistOpen, setIsWishlistOpen] = useState(false);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [isAuthOpen, setIsAuthOpen] = useState(false);
@@ -100,11 +101,13 @@ export default function Home() {
 
   const handleAddDirectProduct = (product: ProductItem, size?: string) => {
     addToCart(product, size);
+    setCartInitialStep('cart');
     setIsCartOpen(true);
   };
 
   const handleBuyNowDirect = (product: ProductItem, size?: string) => {
     addToCart(product, size);
+    setCartInitialStep('checkout');
     setIsCartOpen(true);
   };
 
@@ -133,7 +136,10 @@ export default function Home() {
       {/* Main Navigation Header */}
       <div className="relative">
         <Header
-          onOpenCart={() => setIsCartOpen(true)}
+          onOpenCart={() => {
+            setCartInitialStep('cart');
+            setIsCartOpen(true);
+          }}
           cartCount={totalCartCount}
           onOpenWishlist={() => setIsWishlistOpen(true)}
           wishlistCount={wishlistCount}
@@ -196,6 +202,7 @@ export default function Home() {
 
       <CartDrawer
         isOpen={isCartOpen}
+        initialStep={cartInitialStep}
         onClose={() => setIsCartOpen(false)}
         cartItems={cartItems}
         onRemoveItem={removeCartItem}

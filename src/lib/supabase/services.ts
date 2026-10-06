@@ -1,6 +1,9 @@
 import { supabase, isSupabaseConfigured, supabaseAdmin } from './client';
 import { ProductItem, CartItem } from '@/types';
 import { PRODUCTS_CATALOG } from '@/constants/catalog';
+import { sendOrderPlacedEmails, sendOrderCancelledEmails, STORE_ADMIN_EMAIL } from '@/lib/email/orderEmailService';
+
+export { sendOrderPlacedEmails, sendOrderCancelledEmails, STORE_ADMIN_EMAIL };
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types / Interfaces
@@ -24,6 +27,9 @@ export interface OrderInput {
   shippingFee: number;
   total: number;
   paymentMethod?: string;
+  paymentStatus?: string;
+  razorpayPaymentId?: string;
+  razorpayOrderId?: string;
 }
 
 export interface InquiryInput {
@@ -125,6 +131,60 @@ let cachedBanners:    BannerItem[]     | null = null;
 // Utilities
 // ─────────────────────────────────────────────────────────────────────────────
 
+export const dbClient = () => supabaseAdmin || supabase;
+export const CLOUD_SYNC_BUCKET = 'category-images';
+
+/**
+ * Persists any JSON data structure to Supabase Cloud Storage.
+ * Acts as an infallible cross-origin, cross-device sync layer
+ * (accessible identically from localhost and zaymera.in).
+ */
+export async function syncEntityToCloud(filename: string, data: any): Promise<boolean> {
+  const client = dbClient();
+  if (!client) return false;
+  try {
+    const payload = JSON.stringify(data, null, 2);
+    const body = typeof Buffer !== 'undefined'
+      ? Buffer.from(payload)
+      : new Blob([payload], { type: 'application/json' });
+    const { error } = await client.storage
+      .from(CLOUD_SYNC_BUCKET)
+      .upload(`cloud_data/${filename}`, body, {
+        contentType: 'application/json',
+        upsert: true
+      });
+    if (error) {
+      console.warn(`[cloud-sync] Upload warning for ${filename}:`, error.message);
+      return false;
+    }
+    return true;
+  } catch (err: any) {
+    console.warn(`[cloud-sync] Failed to sync ${filename}:`, err?.message);
+    return false;
+  }
+}
+
+/**
+ * Downloads JSON data from Supabase Cloud Storage.
+ * Ensures consistent shared data across localhost and production.
+ */
+export async function fetchEntityFromCloud<T>(filename: string): Promise<T | null> {
+  const client = dbClient();
+  if (!client) return null;
+  try {
+    const { data, error } = await client.storage
+      .from(CLOUD_SYNC_BUCKET)
+      .download(`cloud_data/${filename}`);
+    if (!error && data) {
+      const text = await data.text();
+      return JSON.parse(text) as T;
+    }
+  } catch {
+    // non-blocking fallback
+  }
+  return null;
+}
+
 // Track tables that are unavailable or missing from Supabase schema cache (e.g. PGRST205 404).
 // Prevents spamming remote queries, eliminates 404 errors, and keeps admin navigation instant.
 const missingTables = new Set<string>();
@@ -199,15 +259,16 @@ export async function uploadImageFile(
   try {
     const cleanFileName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
     const filePath = `${folder}/${Date.now()}-${cleanFileName}`;
+    const client = dbClient();
 
-    if (isSupabaseConfigured) {
-      const { data, error } = await supabase.storage.from(bucket).upload(filePath, file, {
+    if (isSupabaseConfigured && client) {
+      const { data, error } = await client.storage.from(bucket).upload(filePath, file, {
         cacheControl: '3600',
         upsert: true,
       });
 
       if (!error && data) {
-        const { data: urlData } = supabase.storage.from(bucket).getPublicUrl(filePath);
+        const { data: urlData } = client.storage.from(bucket).getPublicUrl(filePath);
         return { publicUrl: urlData.publicUrl, path: filePath, error: null };
       }
     }
@@ -226,8 +287,9 @@ export async function uploadImageFile(
 
 export async function deleteImageFile(bucket: string, path: string): Promise<void> {
   try {
-    if (isSupabaseConfigured && path) {
-      await supabase.storage.from(bucket).remove([path]);
+    const client = dbClient();
+    if (isSupabaseConfigured && path && client) {
+      await client.storage.from(bucket).remove([path]);
     }
   } catch {
     // non-critical
@@ -308,7 +370,36 @@ export function getInitialCoupons(): CouponItem[] {
 // 1. PRODUCTS MANAGEMENT
 // ─────────────────────────────────────────────────────────────────────────────
 
-function formatProductFromDb(item: any): ProductItem {
+function formatProductFromDb(item: any, existingLocalList?: ProductItem[]): ProductItem {
+  let stockVal: number | undefined = undefined;
+
+  // 1. Direct column 'stock' if it exists in Supabase
+  if (item.stock !== undefined && item.stock !== null && !isNaN(Number(item.stock))) {
+    stockVal = Number(item.stock);
+  } else if (Array.isArray(item.sizes)) {
+    // 2. Check if embedded in sizes JSON array in Supabase
+    const sizeWithStock = item.sizes.find((s: any) => s && s.stock !== undefined && s.stock !== null && !isNaN(Number(s.stock)));
+    if (sizeWithStock) {
+      stockVal = Number(sizeWithStock.stock);
+    }
+  }
+
+  // 3. Fallback to existing local products cache so user-edited stock is never lost
+  if (stockVal === undefined) {
+    const list = existingLocalList || getLocalProducts();
+    const localMatch = list.find((p: any) => p && p.id === item.id);
+    if (localMatch && localMatch.stock !== undefined && localMatch.stock !== null && !isNaN(Number(localMatch.stock))) {
+      stockVal = Number(localMatch.stock);
+    }
+  }
+
+  // 4. Default fallback based on in_stock
+  if (stockVal === undefined) {
+    stockVal = item.in_stock === false ? 0 : 10;
+  }
+
+  const isAvailable = item.in_stock !== false && stockVal > 0;
+
   return {
     id:             item.id,
     name:           item.name || '',
@@ -322,24 +413,28 @@ function formatProductFromDb(item: any): ProductItem {
     description:    item.description || '',
     fabric:         item.fabric || '',
     work:           item.work || '',
-    inStock:        item.in_stock !== false,
-    sizes:          Array.isArray(item.sizes) ? item.sizes : [
-      { size: 'S',   inStock: true },
-      { size: 'M',   inStock: true },
-      { size: 'L',   inStock: true },
-      { size: 'XL',  inStock: true },
-      { size: 'XXL', inStock: true },
+    inStock:        isAvailable,
+    stock:          stockVal,
+    sizes:          Array.isArray(item.sizes) ? item.sizes.map((s: any) => ({ ...s, stock: stockVal, inStock: isAvailable })) : [
+      { size: 'S',   inStock: isAvailable, stock: stockVal },
+      { size: 'M',   inStock: isAvailable, stock: stockVal },
+      { size: 'L',   inStock: isAvailable, stock: stockVal },
+      { size: 'XL',  inStock: isAvailable, stock: stockVal },
+      { size: 'XXL', inStock: isAvailable, stock: stockVal },
     ]
   };
 }
 
-export async function fetchProducts(): Promise<{ data: ProductItem[]; error: any }> {
+export async function fetchProducts(forceRefresh: boolean = false): Promise<{ data: ProductItem[]; error: any }> {
   checkAndPurgeOldMockProducts();
 
-  // Serve from cache instantly if available
-  if (cachedProducts && cachedProducts.length > 0) {
-    // Refresh in background
-    _refreshProductsFromDb().catch(() => {});
+  // If forceRefresh is false and cache is populated, return immediately and revalidate in background
+  if (!forceRefresh && cachedProducts && cachedProducts.length > 0) {
+    _refreshProductsFromDb().then(fresh => {
+      if (fresh.data && fresh.data.length > 0) {
+        cachedProducts = fresh.data;
+      }
+    }).catch(() => {});
     return { data: cachedProducts, error: null };
   }
 
@@ -348,16 +443,21 @@ export async function fetchProducts(): Promise<{ data: ProductItem[]; error: any
 
 async function _refreshProductsFromDb(): Promise<{ data: ProductItem[]; error: any }> {
   const localProducts = getLocalProducts();
+  const client = dbClient();
 
   if (!isTableAvailable('products')) {
-    const fallback = localProducts.length > 0 ? localProducts : PRODUCTS_CATALOG;
+    // Attempt to read from cloud storage backup so localhost and production remain in sync
+    const cloudBackup = await fetchEntityFromCloud<ProductItem[]>('products_backup.json');
+    const fallback = (cloudBackup && cloudBackup.length > 0)
+      ? cloudBackup
+      : (localProducts.length > 0 ? localProducts : PRODUCTS_CATALOG);
     cachedProducts = fallback;
     return { data: fallback, error: null };
   }
 
   try {
     const result = await withTimeout(
-      supabase.from('products').select('*').order('created_at', { ascending: false }) as any,
+      client.from('products').select('*').order('created_at', { ascending: false }) as any,
       8000,
       { data: null, error: 'timeout' }
     );
@@ -366,7 +466,10 @@ async function _refreshProductsFromDb(): Promise<{ data: ProductItem[]; error: a
       if (isMissingTableError(result.error)) {
         markTableUnavailable('products');
       }
-      const fallback = localProducts.length > 0 ? localProducts : PRODUCTS_CATALOG;
+      const cloudBackup = await fetchEntityFromCloud<ProductItem[]>('products_backup.json');
+      const fallback = (cloudBackup && cloudBackup.length > 0)
+        ? cloudBackup
+        : (localProducts.length > 0 ? localProducts : PRODUCTS_CATALOG);
       cachedProducts = fallback;
       return { data: fallback, error: null };
     }
@@ -377,14 +480,14 @@ async function _refreshProductsFromDb(): Promise<{ data: ProductItem[]; error: a
       return { data: fallback, error: null };
     }
 
-    const formatted = result.data.map(formatProductFromDb);
-    // Merge DB products with local-only products (those not yet synced)
-    const merged = [
-      ...formatted,
-      ...localProducts.filter(lp => !formatted.some(f => f.id === lp.id))
-    ];
+    const formatted = result.data.map((item: any) => formatProductFromDb(item, localProducts));
+    // Remote database is the primary source of truth across all devices.
+    // Preserve local drafts that start with 'draft-' and have not yet been synced
+    const localDrafts = localProducts.filter(lp => lp.id.startsWith('draft-') && !formatted.some(f => f.id === lp.id));
+    const merged = [...formatted, ...localDrafts];
     cachedProducts = merged;
-    saveLocalProducts(merged); // keep local cache in sync
+    saveLocalProducts(merged); // keep local cache in sync with remote
+    syncEntityToCloud('products_backup.json', merged).catch(() => {});
     return { data: merged, error: null };
   } catch (err) {
     const fallback = localProducts.length > 0 ? localProducts : PRODUCTS_CATALOG;
@@ -393,8 +496,8 @@ async function _refreshProductsFromDb(): Promise<{ data: ProductItem[]; error: a
   }
 }
 
-export async function fetchAllProductsAdmin(): Promise<{ data: ProductItem[]; error: any }> {
-  return fetchProducts();
+export async function fetchAllProductsAdmin(forceRefresh: boolean = false): Promise<{ data: ProductItem[]; error: any }> {
+  return fetchProducts(forceRefresh);
 }
 
 export async function fetchProductById(id: string): Promise<{ data: ProductItem | null; error: any }> {
@@ -409,9 +512,10 @@ export async function fetchProductById(id: string): Promise<{ data: ProductItem 
     if (memoryMatch) return { data: memoryMatch, error: null };
   }
 
-  if (isTableAvailable('products')) {
+  const client = dbClient();
+  if (isTableAvailable('products') && client) {
     try {
-      const { data, error } = await supabase.from('products').select('*').eq('id', id).single();
+      const { data, error } = await client.from('products').select('*').eq('id', id).single();
       if (!error && data) {
         return { data: formatProductFromDb(data), error: null };
       }
@@ -459,6 +563,9 @@ export async function createProduct(
   imageUrls = imageUrls.filter(url => url && !url.startsWith('blob:'));
   const primaryImage = imageUrls[0] || (product.image && !product.image.startsWith('blob:') ? product.image : '') || '/images/royal_blue_anarkali_1788292199640.jpg';
 
+  const stockVal = product.stock !== undefined ? Number(product.stock) : 10;
+  const isAvailable = (stockVal > 0) && (product.inStock !== false);
+
   const fullProduct: ProductItem = {
     id:             newId,
     name:           product.name,
@@ -472,27 +579,31 @@ export async function createProduct(
     description:    product.description || '',
     fabric:         product.fabric || 'Haute Couture Handloom',
     work:           product.work || 'Artisan Handcrafted',
-    inStock:        product.inStock !== false,
+    inStock:        isAvailable,
+    stock:          stockVal,
     sizes:          product.sizes || [
-      { size: 'S',   inStock: true },
-      { size: 'M',   inStock: true },
-      { size: 'L',   inStock: true },
-      { size: 'XL',  inStock: true },
-      { size: 'XXL', inStock: true },
+      { size: 'S',   inStock: isAvailable },
+      { size: 'M',   inStock: isAvailable },
+      { size: 'L',   inStock: isAvailable },
+      { size: 'XL',  inStock: isAvailable },
+      { size: 'XXL', inStock: isAvailable },
     ]
   };
 
   // Save to local cache immediately (optimistic)
   const currentLocal = getLocalProducts();
-  saveLocalProducts([fullProduct, ...currentLocal.filter(p => p.id !== newId)]);
+  const updatedProducts = [fullProduct, ...currentLocal.filter(p => p.id !== newId)];
+  saveLocalProducts(updatedProducts);
+  cachedProducts = null;
 
   // ── Persist to Supabase ───────────────────────────────────────────────────
   let dbError: any = null;
   let savedLocallyOnly = false;
+  const client = dbClient();
 
-  if (isTableAvailable('products')) {
+  if (isTableAvailable('products') && client) {
     try {
-      const dbPayload = {
+      const dbPayload: any = {
         id:              fullProduct.id,
         name:            fullProduct.name,
         category:        fullProduct.category,
@@ -506,15 +617,23 @@ export async function createProduct(
         fabric:          fullProduct.fabric,
         work:            fullProduct.work,
         in_stock:        fullProduct.inStock,
+        stock:           fullProduct.stock,
         sizes:           fullProduct.sizes,
         created_at:      new Date().toISOString(),
       };
-      const { error: dbErr } = await supabase.from('products').upsert(dbPayload);
+      let { error: dbErr } = await client.from('products').upsert(dbPayload, { onConflict: 'id' });
+      if (dbErr && dbErr.message && dbErr.message.includes('stock')) {
+        delete dbPayload.stock;
+        const retry = await client.from('products').upsert(dbPayload, { onConflict: 'id' });
+        dbErr = retry.error;
+      }
       if (dbErr) {
         dbError = dbErr;
         savedLocallyOnly = true;
         if (isMissingTableError(dbErr)) markTableUnavailable('products');
         console.warn('[createProduct] Supabase notice:', dbErr.message);
+      } else {
+        resetSupabaseTableStatus('products');
       }
     } catch (err: any) {
       dbError = err;
@@ -525,6 +644,9 @@ export async function createProduct(
     savedLocallyOnly = true;
     dbError = { message: "The 'products' table does not exist in Supabase yet." };
   }
+
+  // Multi-tier backup to cloud storage so all origins stay in sync
+  syncEntityToCloud('products_backup.json', updatedProducts).catch(() => {});
 
   // Invalidate cache so storefront shows fresh data
   cachedProducts = null;
@@ -566,6 +688,28 @@ export async function updateProduct(
   const idx = currentLocal.findIndex(p => p.id === id);
   let updatedProduct: ProductItem;
 
+  // Auto-sync inStock with stock if stock is provided
+  if (updates.stock !== undefined) {
+    const clampedStock = Math.max(0, Math.floor(Number(updates.stock) || 0));
+    updates.stock = clampedStock;
+    if (updates.inStock === undefined) {
+      updates.inStock = clampedStock > 0;
+    }
+    // Also sync into sizes array so it is preserved in Supabase JSONB column even if stock column doesn't exist yet
+    const currentSizes = updates.sizes || (idx >= 0 ? currentLocal[idx].sizes : undefined) || [
+      { size: 'S', inStock: updates.inStock },
+      { size: 'M', inStock: updates.inStock },
+      { size: 'L', inStock: updates.inStock },
+      { size: 'XL', inStock: updates.inStock },
+      { size: 'XXL', inStock: updates.inStock },
+    ];
+    updates.sizes = currentSizes.map((s: any) => ({
+      ...s,
+      stock: clampedStock,
+      inStock: updates.inStock
+    }));
+  }
+
   if (idx >= 0) {
     updatedProduct = { ...currentLocal[idx], ...updates };
     currentLocal[idx] = updatedProduct;
@@ -575,12 +719,14 @@ export async function updateProduct(
     currentLocal.unshift(updatedProduct);
   }
   saveLocalProducts(currentLocal);
+  cachedProducts = currentLocal;
 
   // ── Update in Supabase ────────────────────────────────────────────────────
   let dbError: any = null;
   let savedLocallyOnly = false;
+  const client = dbClient();
 
-  if (isTableAvailable('products')) {
+  if (isTableAvailable('products') && client) {
     try {
       const dbPayload: Record<string, any> = {};
       if (updates.name          !== undefined) dbPayload.name            = updates.name;
@@ -595,9 +741,15 @@ export async function updateProduct(
       if (updates.fabric        !== undefined) dbPayload.fabric          = updates.fabric;
       if (updates.work          !== undefined) dbPayload.work            = updates.work;
       if (updates.inStock       !== undefined) dbPayload.in_stock        = updates.inStock;
+      if (updates.stock         !== undefined) dbPayload.stock           = updates.stock;
       if (updates.sizes         !== undefined) dbPayload.sizes           = updates.sizes;
 
-      const { error: dbErr } = await supabase.from('products').update(dbPayload).eq('id', id);
+      let { error: dbErr } = await client.from('products').update(dbPayload).eq('id', id);
+      if (dbErr && dbErr.message && dbErr.message.includes('stock')) {
+        delete dbPayload.stock;
+        const retry = await client.from('products').update(dbPayload).eq('id', id);
+        dbErr = retry.error;
+      }
       if (dbErr) {
         dbError = dbErr;
         savedLocallyOnly = true;
@@ -605,6 +757,8 @@ export async function updateProduct(
           markTableUnavailable('products');
         }
         console.warn('[updateProduct] Supabase notice:', dbErr.message);
+      } else {
+        resetSupabaseTableStatus('products');
       }
     } catch (err: any) {
       dbError = err;
@@ -616,17 +770,29 @@ export async function updateProduct(
     dbError = { message: "The 'products' table does not exist in Supabase yet." };
   }
 
-  // Invalidate cache so storefront shows fresh data
-  cachedProducts = null;
+  syncEntityToCloud('products_backup.json', currentLocal).catch(() => {});
+  cachedProducts = currentLocal;
   return { success: !savedLocallyOnly, data: updatedProduct, error: dbError, savedLocallyOnly };
+}
+
+export async function updateProductStock(
+  id: string,
+  newStock: number
+): Promise<{ success: boolean; data: ProductItem | null; error: any }> {
+  const clamped = Math.max(0, Math.floor(Number(newStock) || 0));
+  return updateProduct(id, {
+    stock: clamped,
+    inStock: clamped > 0
+  });
 }
 
 export async function deleteProduct(id: string): Promise<{ success: boolean; error: any }> {
   // Remove from local cache
   const currentLocal = getLocalProducts();
   const product = currentLocal.find(p => p.id === id);
-  saveLocalProducts(currentLocal.filter(p => p.id !== id));
-  if (cachedProducts) cachedProducts = cachedProducts.filter(p => p.id !== id);
+  const remaining = currentLocal.filter(p => p.id !== id);
+  saveLocalProducts(remaining);
+  cachedProducts = null;
 
   // Delete associated images from storage
   if (product?.images && product.images.length > 0) {
@@ -637,9 +803,10 @@ export async function deleteProduct(id: string): Promise<{ success: boolean; err
   }
 
   // Delete from Supabase
-  if (isTableAvailable('products')) {
+  const client = dbClient();
+  if (isTableAvailable('products') && client) {
     try {
-      const { error } = await supabase.from('products').delete().eq('id', id);
+      const { error } = await client.from('products').delete().eq('id', id);
       if (isMissingTableError(error)) {
         markTableUnavailable('products');
       }
@@ -648,7 +815,7 @@ export async function deleteProduct(id: string): Promise<{ success: boolean; err
     }
   }
 
-  // Invalidate cache
+  syncEntityToCloud('products_backup.json', remaining).catch(() => {});
   cachedProducts = null;
   return { success: true, error: null };
 }
@@ -674,9 +841,10 @@ export async function deleteAllProducts(): Promise<{ success: boolean; error: an
     } catch { /* ignore */ }
   }
 
-  if (isTableAvailable('products')) {
+  const client = dbClient();
+  if (isTableAvailable('products') && client) {
     try {
-      const { error } = await supabase.from('products').delete().neq('id', '___none___');
+      const { error } = await client.from('products').delete().neq('id', '___none___');
       if (isMissingTableError(error)) {
         markTableUnavailable('products');
       }
@@ -685,6 +853,7 @@ export async function deleteAllProducts(): Promise<{ success: boolean; error: an
     }
   }
 
+  syncEntityToCloud('products_backup.json', []).catch(() => {});
   return { success: true, error: null };
 }
 
@@ -695,6 +864,7 @@ export async function seedInitialCatalogToSupabase(): Promise<{ count: number; e
   if (!isSupabaseConfigured) {
     return { count: PRODUCTS_CATALOG.length, error: null };
   }
+  const client = dbClient();
   try {
     const formatted = PRODUCTS_CATALOG.map(p => ({
       id:             p.id,
@@ -712,7 +882,7 @@ export async function seedInitialCatalogToSupabase(): Promise<{ count: number; e
       sizes:          p.sizes,
       created_at:     new Date().toISOString(),
     }));
-    const { error: upsertErr } = await supabase.from('products').upsert(formatted, { onConflict: 'id' });
+    const { error: upsertErr } = await client.from('products').upsert(formatted, { onConflict: 'id' });
     if (upsertErr) {
       if (isMissingTableError(upsertErr)) {
         markTableUnavailable('products');
@@ -720,6 +890,7 @@ export async function seedInitialCatalogToSupabase(): Promise<{ count: number; e
     } else {
       resetSupabaseTableStatus('products');
     }
+    syncEntityToCloud('products_backup.json', PRODUCTS_CATALOG).catch(() => {});
     return { count: formatted.length, error: null };
   } catch {
     return { count: PRODUCTS_CATALOG.length, error: null };
@@ -729,35 +900,55 @@ export async function seedInitialCatalogToSupabase(): Promise<{ count: number; e
 export async function checkDatabaseConnection(): Promise<{
   isConfigured: boolean;
   tableExists: boolean;
+  ordersTableExists: boolean;
   error: string | null;
 }> {
   if (!isSupabaseConfigured) {
     return {
       isConfigured: false,
       tableExists: false,
+      ordersTableExists: false,
       error: 'Supabase credentials are not configured in your .env file.',
     };
   }
+  const client = dbClient();
+  let productsOk = false;
+  let ordersOk = false;
+  let errMsg: string | null = null;
+
   try {
     resetSupabaseTableStatus('products');
-    const { error } = await supabase.from('products').select('id').limit(1);
-    if (error) {
-      if (isMissingTableError(error)) {
-        markTableUnavailable('products');
-        return {
-          isConfigured: true,
-          tableExists: false,
-          error: "Table 'public.products' does not exist in Supabase. Please run supabase/schema.sql in the Supabase SQL Editor.",
-        };
-      }
-      return { isConfigured: true, tableExists: false, error: error.message };
+    const { error: pErr } = await client.from('products').select('id').limit(1);
+    if (!pErr) {
+      productsOk = true;
+    } else {
+      errMsg = pErr.message;
+      if (isMissingTableError(pErr)) markTableUnavailable('products');
     }
-    resetSupabaseTableStatus('products');
-    return { isConfigured: true, tableExists: true, error: null };
+
+    resetSupabaseTableStatus('orders');
+    const { error: oErr } = await client.from('orders').select('id').limit(1);
+    if (!oErr) {
+      ordersOk = true;
+    } else {
+      if (isMissingTableError(oErr)) markTableUnavailable('orders');
+    }
+
+    return {
+      isConfigured: true,
+      tableExists: productsOk,
+      ordersTableExists: ordersOk,
+      error: (!productsOk || !ordersOk)
+        ? (!ordersOk && productsOk)
+          ? "The 'products' table is active, but 'orders' table is not yet created in Supabase SQL editor. Orders are currently synchronizing live via Cloud Storage fallback!"
+          : errMsg
+        : null
+    };
   } catch (err: any) {
     return {
       isConfigured: true,
-      tableExists: false,
+      tableExists: productsOk,
+      ordersTableExists: ordersOk,
       error: err?.message || 'Failed to connect to Supabase database',
     };
   }
@@ -782,6 +973,7 @@ export async function syncLocalProductsToSupabase(): Promise<{
     };
   }
 
+  const client = dbClient();
   try {
     const payloads = localProducts.map((p) => ({
       id:              p.id,
@@ -801,7 +993,7 @@ export async function syncLocalProductsToSupabase(): Promise<{
       created_at:      new Date().toISOString(),
     }));
 
-    const { error } = await supabase.from('products').upsert(payloads, { onConflict: 'id' });
+    const { error } = await client.from('products').upsert(payloads, { onConflict: 'id' });
     if (error) {
       return { success: false, syncedCount: 0, error: error.message };
     }
@@ -850,6 +1042,32 @@ export function getLocalOrders(): any[] {
   return lsGet<any[]>(LS.ORDERS, DEMO_ORDERS);
 }
 
+export const ORDER_CANCELLATION_WINDOW_MINUTES = 15;
+
+const LS_CUSTOMER_ORDERS = 'zaymera_customer_recent_orders';
+
+export function saveCustomerRecentOrder(orderNumber: string) {
+  if (typeof window === 'undefined' || !orderNumber) return;
+  try {
+    const existing = getCustomerRecentOrders();
+    const clean = orderNumber.trim();
+    const updated = [clean, ...existing.filter(o => o.toLowerCase() !== clean.toLowerCase())].slice(0, 30);
+    localStorage.setItem(LS_CUSTOMER_ORDERS, JSON.stringify(updated));
+  } catch (err) {
+    console.warn('[saveCustomerRecentOrder] error:', err);
+  }
+}
+
+export function getCustomerRecentOrders(): string[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    const raw = localStorage.getItem(LS_CUSTOMER_ORDERS);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
+
 export function saveLocalOrders(orders: any[]) {
   cachedOrders = orders;
   lsSet(LS.ORDERS, orders);
@@ -868,8 +1086,11 @@ export async function createOrder(order: OrderInput) {
     shipping_fee: order.shippingFee,
     total: order.total,
     payment_method: order.paymentMethod || 'COD',
-    payment_status: 'pending',
-    order_status: 'processing',
+    payment_status: order.paymentStatus || 'pending',
+    order_status: order.paymentStatus === 'paid' ? 'confirmed' : 'processing',
+    razorpay_payment_id: order.razorpayPaymentId || null,
+    razorpay_order_id: order.razorpayOrderId || null,
+    stock_restored: false,
     created_at: new Date().toISOString(),
     order_items: order.cartItems.map(item => ({
       product_id:    item.product.id,
@@ -881,94 +1102,327 @@ export async function createOrder(order: OrderInput) {
     }))
   };
 
-  const currentLocal = getLocalOrders();
-  saveLocalOrders([newOrder, ...currentLocal]);
+  // 1. Update local cache immediately
+  const currentLocal = getLocalOrders().filter(o => o.id !== 'ord-101' && o.id !== 'ord-102');
+  const updatedOrders = [newOrder, ...currentLocal.filter(o => o.id !== newOrder.id && o.order_number !== newOrder.order_number)];
+  saveLocalOrders(updatedOrders);
+  cachedOrders = updatedOrders;
+
+  // 2. Persist to customer's browser recent orders
+  saveCustomerRecentOrder(order.orderNumber);
+
+  // 3. Persist to Cloud Storage so localhost and live (zaymera.in) share this order immediately
+  syncEntityToCloud('orders.json', updatedOrders).catch(() => {});
+
+  // 4. ── AUTOMATICALLY DECREMENT STOCK IN INVENTORY ──
+  try {
+    const qtyByProduct = new Map<string, number>();
+    for (const item of order.cartItems) {
+      const pid = item.product?.id;
+      if (pid) {
+        qtyByProduct.set(pid, (qtyByProduct.get(pid) || 0) + (item.quantity || 1));
+      }
+    }
+
+    for (const [productId, qtyToDeduct] of qtyByProduct.entries()) {
+      const { data: prod } = await fetchProductById(productId);
+      if (prod) {
+        const curStock = prod.stock !== undefined ? prod.stock : (prod.inStock ? 10 : 0);
+        const nextStock = Math.max(0, curStock - qtyToDeduct);
+        await updateProductStock(productId, nextStock);
+      }
+    }
+
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('zaymera-stock-updated', {
+        detail: { orderNumber: order.orderNumber, action: 'order_created' }
+      }));
+    }
+  } catch (stockErr) {
+    console.warn('[createOrder] Auto-decrement stock notice:', stockErr);
+  }
 
   if (!isSupabaseConfigured) {
     return { success: true, orderData: newOrder, isDemo: true };
   }
 
-  try {
-    const { data: orderData, error: orderError } = await supabase
-      .from('orders')
-      .insert({
-        user_id:          order.userId || null,
-        order_number:     order.orderNumber,
-        customer_name:    order.customerName,
-        customer_email:   order.customerEmail,
-        customer_phone:   order.customerPhone,
-        shipping_address: order.shippingAddress,
-        subtotal:         order.subtotal,
-        shipping_fee:     order.shippingFee,
-        total:            order.total,
-        payment_method:   order.paymentMethod || 'COD',
-        payment_status:   'pending',
-        order_status:     'processing'
-      })
-      .select()
-      .single();
+  // 5. Attempt insertion into PostgreSQL tables if available
+  const client = dbClient();
+  if (isTableAvailable('orders') && client) {
+    try {
+      const { data: orderData, error: orderError } = await client
+        .from('orders')
+        .insert({
+          user_id:          order.userId || null,
+          order_number:     order.orderNumber,
+          customer_name:    order.customerName,
+          customer_email:   order.customerEmail,
+          customer_phone:   order.customerPhone,
+          shipping_address: order.shippingAddress,
+          subtotal:         order.subtotal,
+          shipping_fee:     order.shippingFee,
+          total:            order.total,
+          payment_method:   order.paymentMethod || 'COD',
+          payment_status:   order.paymentStatus || 'pending',
+          order_status:     order.paymentStatus === 'paid' ? 'confirmed' : 'processing'
+        })
+        .select()
+        .single();
 
-    if (orderError) throw orderError;
+      if (!orderError && orderData) {
+        const itemsToInsert = order.cartItems.map(item => ({
+          order_id:      orderData.id,
+          product_id:    item.product.id,
+          product_name:  item.product.name,
+          product_image: item.product.image,
+          size:          item.size,
+          price:         item.product.price,
+          quantity:      item.quantity
+        }));
+        // ── AUTOMATED TRANSACTIONAL EMAIL NOTIFICATION ──
+        sendOrderPlacedEmails(orderData).catch(mailErr => {
+          console.warn('[createOrder] Automated email notification notice:', mailErr);
+        });
+        return { success: true, orderData, error: null };
+      }
 
-    const itemsToInsert = order.cartItems.map(item => ({
-      order_id:      orderData.id,
-      product_id:    item.product.id,
-      product_name:  item.product.name,
-      product_image: item.product.image,
-      size:          item.size,
-      price:         item.product.price,
-      quantity:      item.quantity
-    }));
-
-    await supabase.from('order_items').insert(itemsToInsert);
-    return { success: true, orderData, error: null };
-  } catch (err: any) {
-    return { success: true, orderData: newOrder, error: null };
+      if (orderError && isMissingTableError(orderError)) {
+        markTableUnavailable('orders');
+      }
+    } catch (err: any) {
+      if (isMissingTableError(err)) {
+        markTableUnavailable('orders');
+      }
+    }
   }
+
+  // ── AUTOMATED TRANSACTIONAL EMAIL NOTIFICATION (Fallback/Local/Demo) ──
+  sendOrderPlacedEmails(newOrder).catch(mailErr => {
+    console.warn('[createOrder] Automated email notification notice:', mailErr);
+  });
+
+  return { success: true, orderData: newOrder, error: null };
+}
+
+/**
+ * Cancels a customer order if within the allowable cancellation window (e.g. 15 minutes)
+ * and automatically restores inventory quantities back to the stock ledger.
+ */
+export async function cancelCustomerOrder(
+  orderNumberOrId: string,
+  reason: string = 'Order cancelled by customer'
+): Promise<{ success: boolean; message: string; order?: any; error?: any }> {
+  const cleanId = (orderNumberOrId || '').trim();
+  if (!cleanId) {
+    return { success: false, message: 'Invalid order reference.' };
+  }
+
+  // 1. Locate order
+  const order = await getOrderByNumber(cleanId);
+  if (!order) {
+    return { success: false, message: `Order "${cleanId}" was not found.` };
+  }
+
+  // 2. Validate current status
+  if (order.order_status === 'cancelled') {
+    return { success: false, message: 'This order has already been cancelled.' };
+  }
+
+  if (order.order_status === 'shipped' || order.order_status === 'delivered') {
+    return {
+      success: false,
+      message: 'This order has already been dispatched with luxury courier and can no longer be cancelled.'
+    };
+  }
+
+  // 3. Validate cancellation window (15 minutes from creation)
+  const createdAtMs = new Date(order.created_at || order.createdAt || Date.now()).getTime();
+  const elapsedMinutes = (Date.now() - createdAtMs) / (1000 * 60);
+
+  if (elapsedMinutes > ORDER_CANCELLATION_WINDOW_MINUTES) {
+    return {
+      success: false,
+      message: `The ${ORDER_CANCELLATION_WINDOW_MINUTES}-minute cancellation window has elapsed. Artisan crafting and dispatch preparation are underway.`
+    };
+  }
+
+  // 4. AUTOMATICALLY RESTORE INVENTORY STOCK
+  if (!order.stock_restored) {
+    try {
+      const items = order.order_items || order.cartItems || [];
+      const qtyByProduct = new Map<string, number>();
+
+      for (const it of items) {
+        const pid = it.product_id || it.product?.id || it.id;
+        const q = Number(it.quantity) || 1;
+        if (pid) {
+          qtyByProduct.set(pid, (qtyByProduct.get(pid) || 0) + q);
+        }
+      }
+
+      for (const [productId, qtyToAdd] of qtyByProduct.entries()) {
+        const { data: prod } = await fetchProductById(productId);
+        if (prod) {
+          const curStock = prod.stock !== undefined ? prod.stock : (prod.inStock ? 10 : 0);
+          const restoredStock = curStock + qtyToAdd;
+          await updateProductStock(productId, restoredStock);
+        }
+      }
+
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('zaymera-stock-updated', {
+          detail: { orderNumber: order.order_number, action: 'order_cancelled', restored: true }
+        }));
+      }
+    } catch (stockErr) {
+      console.warn('[cancelCustomerOrder] Inventory restoration notice:', stockErr);
+    }
+  }
+
+  // 5. Update order state in cache, cloud sync, and Supabase
+  const nowIso = new Date().toISOString();
+  const updatedFields = {
+    order_status: 'cancelled',
+    stock_restored: true,
+    cancelled_at: nowIso,
+    cancel_reason: reason
+  };
+
+  const currentLocal = getLocalOrders();
+  const updatedList = currentLocal.map(o =>
+    (o.id === order.id || o.order_number === order.order_number || o.order_number === cleanId)
+      ? { ...o, ...updatedFields }
+      : o
+  );
+  cachedOrders = updatedList;
+  saveLocalOrders(updatedList);
+  syncEntityToCloud('orders.json', updatedList).catch(() => {});
+
+  const client = dbClient();
+  if (isTableAvailable('orders') && client) {
+    try {
+      await client
+        .from('orders')
+        .update({
+          order_status: 'cancelled',
+          updated_at: nowIso
+        })
+        .or(`id.eq.${order.id},order_number.eq.${order.order_number}`);
+    } catch (dbErr) {
+      console.warn('[cancelCustomerOrder] Supabase update notice:', dbErr);
+    }
+  }
+
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('zaymera-orders-updated', {
+      detail: { orderNumber: order.order_number, status: 'cancelled' }
+    }));
+  }
+
+  const finalOrder = { ...order, ...updatedFields };
+
+  // ── AUTOMATED CANCELLATION EMAIL DISPATCH ──
+  // Dispatches cancellation details to both customer email and zaymerawardrobe@gmail.com
+  sendOrderCancelledEmails(finalOrder, reason).catch(cancelMailErr => {
+    console.warn('[cancelCustomerOrder] Email cancellation notice:', cancelMailErr);
+  });
+
+  return {
+    success: true,
+    message: `Order ${order.order_number} has been cancelled successfully. Ordered items have been returned to stock.`,
+    order: finalOrder
+  };
 }
 
 export async function fetchAdminOrders(): Promise<{ data: any[]; error: any }> {
-  const localOrders = getLocalOrders();
-  if (!cachedOrders || cachedOrders.length === 0) cachedOrders = localOrders;
+  const client = dbClient();
 
-  if (!isTableAvailable('orders')) return { data: cachedOrders, error: null };
+  // 1. Try SQL database first
+  if (isTableAvailable('orders') && client) {
+    try {
+      const result = await withTimeout(
+        client.from('orders').select('*, order_items(*)').order('created_at', { ascending: false }) as any,
+        6000,
+        { data: null, error: 'timeout' }
+      );
 
-  try {
-    const result = await withTimeout(
-      supabase.from('orders').select('*, order_items(*)').order('created_at', { ascending: false }) as any,
-      1500,
-      { data: null, error: 'timeout' }
-    );
+      if (!result.error && Array.isArray(result.data) && result.data.length > 0) {
+        cachedOrders = result.data;
+        saveLocalOrders(result.data);
+        syncEntityToCloud('orders.json', result.data).catch(() => {});
+        return { data: result.data, error: null };
+      }
 
-    if (result.error || result.data === null || result.data.length === 0) {
       if (isMissingTableError(result.error)) {
         markTableUnavailable('orders');
       }
-      return { data: cachedOrders || localOrders, error: null };
+    } catch {
+      // non-blocking fallback
     }
-
-    const combined = [
-      ...result.data,
-      ...localOrders.filter(lo => !result.data.some((d: any) => d.order_number === lo.order_number))
-    ];
-    cachedOrders = combined;
-    return { data: combined, error: null };
-  } catch {
-    return { data: cachedOrders || localOrders, error: null };
   }
+
+  // 2. Fetch from Cloud Storage (infallible cross-device sync)
+  try {
+    const cloudOrders = await fetchEntityFromCloud<any[]>('orders.json');
+    if (cloudOrders && Array.isArray(cloudOrders) && cloudOrders.length > 0) {
+      cachedOrders = cloudOrders;
+      saveLocalOrders(cloudOrders);
+      return { data: cloudOrders, error: null };
+    }
+  } catch {}
+
+  // 3. Fallback to local cache
+  const localOrders = getLocalOrders();
+  cachedOrders = localOrders;
+  return { data: localOrders, error: null };
 }
 
 export async function updateOrderStatus(orderId: string, status: string): Promise<{ success: boolean; error: any }> {
   const currentLocal = getLocalOrders();
+  const targetOrder = currentLocal.find(o => o.id === orderId || o.order_number === orderId);
+
+  // If status changed to cancelled and stock has not been restored, restore it
+  if (status === 'cancelled' && targetOrder && !targetOrder.stock_restored) {
+    try {
+      const items = targetOrder.order_items || targetOrder.cartItems || [];
+      for (const it of items) {
+        const pid = it.product_id || it.product?.id || it.id;
+        const q = Number(it.quantity) || 1;
+        if (pid) {
+          const { data: prod } = await fetchProductById(pid);
+          if (prod) {
+            const cur = prod.stock !== undefined ? prod.stock : (prod.inStock ? 10 : 0);
+            await updateProductStock(pid, cur + q);
+          }
+        }
+      }
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('zaymera-stock-updated', {
+          detail: { orderId, action: 'order_cancelled', restored: true }
+        }));
+      }
+    } catch (e) {
+      console.warn('[updateOrderStatus] Stock restoration notice:', e);
+    }
+  }
+
   const updated = currentLocal.map(o =>
-    o.id === orderId || o.order_number === orderId ? { ...o, order_status: status } : o
+    o.id === orderId || o.order_number === orderId
+      ? {
+          ...o,
+          order_status: status,
+          ...(status === 'cancelled' ? { stock_restored: true, cancelled_at: new Date().toISOString() } : {})
+        }
+      : o
   );
   cachedOrders = updated;
   saveLocalOrders(updated);
+  syncEntityToCloud('orders.json', updated).catch(() => {});
 
-  if (isTableAvailable('orders')) {
+  const client = dbClient();
+  if (isTableAvailable('orders') && client) {
     try {
-      const { error } = await supabase.from('orders').update({ order_status: status }).eq('id', orderId);
+      const { error } = await client.from('orders').update({ order_status: status }).or(`id.eq.${orderId},order_number.eq.${orderId}`);
       if (isMissingTableError(error)) {
         markTableUnavailable('orders');
       }
@@ -976,6 +1430,19 @@ export async function updateOrderStatus(orderId: string, status: string): Promis
       // silent fallback
     }
   }
+
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('zaymera-orders-updated', { detail: { orderId, status } }));
+  }
+
+  // ── AUTOMATED CANCELLATION EMAIL IF STATUS CHANGED TO CANCELLED ──
+  if (status === 'cancelled' && targetOrder) {
+    const cancelledCopy = { ...targetOrder, order_status: 'cancelled', cancelled_at: new Date().toISOString() };
+    sendOrderCancelledEmails(cancelledCopy, 'Order marked as cancelled by atelier administration').catch(err => {
+      console.warn('[updateOrderStatus] Cancel email notice:', err);
+    });
+  }
+
   return { success: true, error: null };
 }
 
@@ -985,22 +1452,21 @@ export async function deleteOrder(orderId: string): Promise<{ success: boolean; 
   const updated = currentLocal.filter(o => o.id !== orderId && o.order_number !== orderId);
   cachedOrders = updated;
   saveLocalOrders(updated);
+  syncEntityToCloud('orders.json', updated).catch(() => {});
 
   // Remove from Supabase if table is available
-  if (isTableAvailable('orders')) {
+  const client = dbClient();
+  if (isTableAvailable('orders') && client) {
     try {
-      // Find matching order id in case orderId was order_number
-      const { data: matched } = await supabase
+      const { data: matched } = await client
         .from('orders')
         .select('id')
         .or(`id.eq.${orderId},order_number.eq.${orderId}`);
 
       const targetIds = (matched && matched.length > 0) ? matched.map((m: any) => m.id) : [orderId];
 
-      // Delete child items first to satisfy foreign key constraints
-      await supabase.from('order_items').delete().in('order_id', targetIds);
-      // Delete parent order
-      const { error } = await supabase.from('orders').delete().in('id', targetIds);
+      await client.from('order_items').delete().in('order_id', targetIds);
+      const { error } = await client.from('orders').delete().in('id', targetIds);
 
       if (error && isMissingTableError(error)) {
         markTableUnavailable('orders');
@@ -1012,27 +1478,94 @@ export async function deleteOrder(orderId: string): Promise<{ success: boolean; 
   return { success: true, error: null };
 }
 
-
 export async function getOrderByNumber(orderNumber: string) {
-  const localOrders = getLocalOrders();
-  const found = localOrders.find(o => o.order_number.toLowerCase() === orderNumber.trim().toLowerCase());
-  if (found) return found;
-  if (!isTableAvailable('orders')) return null;
+  const cleanNumber = orderNumber.trim().toLowerCase();
 
-  try {
-    const { data, error } = await supabase
-      .from('orders')
-      .select('*, order_items(*)')
-      .eq('order_number', orderNumber.trim())
-      .single();
-    if (error) {
+  // 1. Check local cache
+  const localOrders = getLocalOrders();
+  const foundLocal = localOrders.find(o => o.order_number?.toLowerCase() === cleanNumber);
+  if (foundLocal) return foundLocal;
+
+  // 2. Check SQL table
+  const client = dbClient();
+  if (isTableAvailable('orders') && client) {
+    try {
+      const { data, error } = await client
+        .from('orders')
+        .select('*, order_items(*)')
+        .eq('order_number', orderNumber.trim())
+        .single();
+      if (!error && data) return data;
       if (isMissingTableError(error)) {
         markTableUnavailable('orders');
       }
-      return null;
+    } catch { /* continue */ }
+  }
+
+  // 3. Check Cloud Storage
+  try {
+    const cloudOrders = await fetchEntityFromCloud<any[]>('orders.json');
+    if (cloudOrders && Array.isArray(cloudOrders)) {
+      const foundCloud = cloudOrders.find(o => o.order_number?.toLowerCase() === cleanNumber);
+      if (foundCloud) return foundCloud;
     }
-    return data;
-  } catch { return null; }
+  } catch {}
+
+  return null;
+}
+
+export async function syncLocalOrdersToSupabase(): Promise<{ success: boolean; syncedCount: number; error: string | null }> {
+  const client = dbClient();
+  if (!client) return { success: false, syncedCount: 0, error: 'Database client unavailable' };
+
+  // Fetch orders from cloud storage or local cache
+  let orders = await fetchEntityFromCloud<any[]>('orders.json');
+  if (!orders || orders.length === 0) {
+    orders = getLocalOrders().filter(o => o.id !== 'ord-101' && o.id !== 'ord-102');
+  }
+
+  if (!orders || orders.length === 0) {
+    return { success: true, syncedCount: 0, error: 'No orders found to sync.' };
+  }
+
+  let synced = 0;
+  for (const ord of orders) {
+    try {
+      const { data: orderData, error: oErr } = await client.from('orders').upsert({
+        id: ord.id || undefined,
+        user_id: ord.user_id || null,
+        order_number: ord.order_number,
+        customer_name: ord.customer_name,
+        customer_email: ord.customer_email,
+        customer_phone: ord.customer_phone || '',
+        shipping_address: ord.shipping_address || {},
+        subtotal: ord.subtotal || 0,
+        shipping_fee: ord.shipping_fee || 0,
+        total: ord.total || 0,
+        payment_method: ord.payment_method || 'COD',
+        payment_status: ord.payment_status || 'pending',
+        order_status: ord.order_status || 'processing',
+        created_at: ord.created_at || new Date().toISOString()
+      }, { onConflict: 'order_number' }).select().single();
+
+      if (!oErr && orderData && Array.isArray(ord.order_items)) {
+        for (const itm of ord.order_items) {
+          await client.from('order_items').insert({
+            order_id: orderData.id,
+            product_id: itm.product_id || null,
+            product_name: itm.product_name,
+            product_image: itm.product_image || '',
+            size: itm.size || '',
+            price: itm.price || 0,
+            quantity: itm.quantity || 1
+          });
+        }
+        synced++;
+      }
+    } catch { /* ignore individual sync failure */ }
+  }
+
+  return { success: true, syncedCount: synced, error: null };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1065,63 +1598,85 @@ export async function submitInquiry(inquiry: InquiryInput) {
   };
 
   const currentLocal = getLocalInquiries();
-  saveLocalInquiries([newInquiry, ...currentLocal]);
+  // Filter out demo inquiries when saving real inquiries
+  const filtered = currentLocal.filter(i => i.id !== 'inq-1' && i.id !== 'inq-2');
+  const updated = [newInquiry, ...filtered];
+  saveLocalInquiries(updated);
+  syncEntityToCloud('inquiries.json', updated).catch(() => {});
 
-  if (!isTableAvailable('inquiries')) return { success: true, data: newInquiry, isDemo: true };
-
-  try {
-    const { data, error } = await supabase
-      .from('inquiries')
-      .insert({ name: inquiry.name, email: inquiry.email, phone: inquiry.phone || '', service_type: inquiry.serviceType || 'General Inquiry', message: inquiry.message })
-      .select().single();
-    if (error) {
-      if (isMissingTableError(error)) {
-        markTableUnavailable('inquiries');
+  const client = dbClient();
+  if (client && isTableAvailable('inquiries')) {
+    try {
+      const { data, error } = await client
+        .from('inquiries')
+        .insert({
+          name: inquiry.name,
+          email: inquiry.email,
+          phone: inquiry.phone || '',
+          service_type: inquiry.serviceType || 'General Inquiry',
+          message: inquiry.message
+        })
+        .select().single();
+      if (error) {
+        if (isMissingTableError(error)) {
+          markTableUnavailable('inquiries');
+        }
+      } else if (data) {
+        return { success: true, data };
       }
-      return { success: true, data: newInquiry, error: null };
+    } catch {
+      // fallback
     }
-    return { success: true, data };
-  } catch {
-    return { success: true, data: newInquiry, error: null };
   }
+
+  return { success: true, data: newInquiry };
 }
 
 export async function fetchAdminInquiries(): Promise<{ data: any[]; error: any }> {
-  const localInquiries = getLocalInquiries();
-  if (!cachedInquiries || cachedInquiries.length === 0) cachedInquiries = localInquiries;
-  if (!isTableAvailable('inquiries')) return { data: cachedInquiries, error: null };
-
+  // 1. Try cloud storage
   try {
-    const result = await withTimeout(
-      supabase.from('inquiries').select('*').order('created_at', { ascending: false }) as any,
-      1500,
-      { data: null, error: 'timeout' }
-    );
-    if (result.error || result.data === null || result.data.length === 0) {
-      if (isMissingTableError(result.error)) {
+    const cloud = await fetchEntityFromCloud<any[]>('inquiries.json');
+    if (cloud && cloud.length > 0) {
+      cachedInquiries = cloud;
+      saveLocalInquiries(cloud);
+      return { data: cloud, error: null };
+    }
+  } catch {}
+
+  // 2. Try DB if table available
+  const client = dbClient();
+  if (client && isTableAvailable('inquiries')) {
+    try {
+      const result = await withTimeout(
+        client.from('inquiries').select('*').order('created_at', { ascending: false }) as any,
+        2500,
+        { data: null, error: 'timeout' }
+      );
+      if (result.data && result.data.length > 0) {
+        cachedInquiries = result.data;
+        saveLocalInquiries(result.data);
+        syncEntityToCloud('inquiries.json', result.data).catch(() => {});
+        return { data: result.data, error: null };
+      } else if (isMissingTableError(result.error)) {
         markTableUnavailable('inquiries');
       }
-      return { data: cachedInquiries || localInquiries, error: null };
-    }
-    const combined = [
-      ...result.data,
-      ...localInquiries.filter(li => !result.data.some((d: any) => d.id === li.id))
-    ];
-    cachedInquiries = combined;
-    return { data: combined, error: null };
-  } catch {
-    return { data: cachedInquiries || localInquiries, error: null };
+    } catch {}
   }
+
+  const local = getLocalInquiries();
+  return { data: cachedInquiries || local, error: null };
 }
 
 export async function updateInquiryStatus(inquiryId: string, status: string): Promise<{ success: boolean; error: any }> {
   const currentLocal = getLocalInquiries();
   const updated = currentLocal.map(i => i.id === inquiryId ? { ...i, status } : i);
   saveLocalInquiries(updated);
+  syncEntityToCloud('inquiries.json', updated).catch(() => {});
 
-  if (isTableAvailable('inquiries')) {
+  const client = dbClient();
+  if (client && isTableAvailable('inquiries')) {
     try {
-      const { error } = await supabase.from('inquiries').update({ status }).eq('id', inquiryId);
+      const { error } = await client.from('inquiries').update({ status }).eq('id', inquiryId);
       if (isMissingTableError(error)) {
         markTableUnavailable('inquiries');
       }
@@ -1150,38 +1705,11 @@ export function saveLocalCategories(cats: CategoryItem[]) {
 }
 
 async function syncCategoriesToCloud(cats: CategoryItem[]): Promise<void> {
-  if (!supabase) return;
-  try {
-    const payload = JSON.stringify(cats, null, 2);
-    const body = typeof Buffer !== 'undefined' ? Buffer.from(payload) : new Blob([payload], { type: 'application/json' });
-    await supabase.storage
-      .from('category-images')
-      .upload('categories.json', body, {
-        contentType: 'application/json',
-        upsert: true
-      });
-  } catch (err) {
-    console.warn('Could not sync categories to cloud storage:', err);
-  }
+  await syncEntityToCloud('categories.json', cats);
 }
 
 async function fetchCategoriesFromCloud(): Promise<CategoryItem[] | null> {
-  if (!supabase) return null;
-  try {
-    const { data, error } = await supabase.storage
-      .from('category-images')
-      .download('categories.json');
-    if (!error && data) {
-      const text = await data.text();
-      const parsed = JSON.parse(text);
-      if (Array.isArray(parsed)) {
-        return parsed;
-      }
-    }
-  } catch {
-    // non-blocking
-  }
-  return null;
+  return fetchEntityFromCloud<CategoryItem[]>('categories.json');
 }
 
 export async function fetchCategories(): Promise<{ data: CategoryItem[]; error: any }> {
@@ -1196,7 +1724,7 @@ async function _refreshCategoriesFromDb(): Promise<{ data: CategoryItem[]; error
   // 1. Fetch from Supabase Cloud Storage (authoritative across all devices for admin-added categories)
   try {
     const cloudCategories = await fetchCategoriesFromCloud();
-    if (cloudCategories !== null) {
+    if (cloudCategories !== null && cloudCategories.length > 0) {
       cachedCategories = cloudCategories;
       saveLocalCategories(cloudCategories);
       return { data: cloudCategories, error: null };
@@ -1204,11 +1732,12 @@ async function _refreshCategoriesFromDb(): Promise<{ data: CategoryItem[]; error
   } catch {}
 
   // 2. Also try SQL table if available
-  if (isTableAvailable('categories')) {
+  const client = dbClient();
+  if (client && isTableAvailable('categories')) {
     try {
       const result = await withTimeout(
-        supabase.from('categories').select('*').order('sort_order', { ascending: true }) as any,
-        4000,
+        client.from('categories').select('*').order('sort_order', { ascending: true }) as any,
+        3000,
         { data: null, error: 'timeout' }
       );
       if (result.data && result.data.length > 0) {
@@ -1218,6 +1747,7 @@ async function _refreshCategoriesFromDb(): Promise<{ data: CategoryItem[]; error
         }));
         cachedCategories = formatted;
         saveLocalCategories(formatted);
+        syncCategoriesToCloud(formatted).catch(() => {});
         return { data: formatted, error: null };
       } else if (isMissingTableError(result.error)) {
         markTableUnavailable('categories');
@@ -1259,9 +1789,10 @@ export async function createCategory(
   saveLocalCategories(updated);
   syncCategoriesToCloud(updated).catch(() => {});
 
-  if (isTableAvailable('categories')) {
+  const client = dbClient();
+  if (client && isTableAvailable('categories')) {
     try {
-      const { error } = await supabase.from('categories').upsert({
+      const { error } = await client.from('categories').upsert({
         id: newCat.id, title: newCat.title, slug: newCat.slug,
         count: newCat.count, image: newCat.image,
         description: newCat.description, featured: newCat.featured
@@ -1288,7 +1819,8 @@ export async function updateCategory(id: string, updates: Partial<CategoryItem> 
   saveLocalCategories(updated);
   syncCategoriesToCloud(updated).catch(() => {});
 
-  if (isTableAvailable('categories')) {
+  const client = dbClient();
+  if (client && isTableAvailable('categories')) {
     try {
       const dbPayload: Record<string, any> = {};
       if (updates.title       !== undefined) dbPayload.title       = updates.title;
@@ -1297,7 +1829,7 @@ export async function updateCategory(id: string, updates: Partial<CategoryItem> 
       if (updates.image       !== undefined) dbPayload.image       = updates.image;
       if (updates.description !== undefined) dbPayload.description = updates.description;
       if (updates.featured    !== undefined) dbPayload.featured    = updates.featured;
-      const { error } = await supabase.from('categories').update(dbPayload).eq('id', id);
+      const { error } = await client.from('categories').update(dbPayload).eq('id', id);
       if (isMissingTableError(error)) {
         markTableUnavailable('categories');
       }
@@ -1314,9 +1846,10 @@ export async function deleteCategory(id: string): Promise<{ success: boolean }> 
   saveLocalCategories(updated);
   syncCategoriesToCloud(updated).catch(() => {});
 
-  if (isTableAvailable('categories')) {
+  const client = dbClient();
+  if (client && isTableAvailable('categories')) {
     try {
-      const { error } = await supabase.from('categories').delete().eq('id', id);
+      const { error } = await client.from('categories').delete().eq('id', id);
       if (isMissingTableError(error)) {
         markTableUnavailable('categories');
       }
@@ -1417,46 +1950,52 @@ export async function fetchCoupons(): Promise<{ data: CouponItem[]; error: any }
 }
 
 async function _refreshCouponsFromDb(): Promise<{ data: CouponItem[]; error: any }> {
-  const local = getLocalCoupons();
-  if (!isTableAvailable('coupons')) {
-    cachedCoupons = local;
-    return { data: local, error: null };
-  }
-
+  // 1. Try cloud storage sync
   try {
-    const result = await withTimeout(
-      supabase.from('coupons').select('*').order('created_at', { ascending: false }) as any,
-      1500,
-      { data: null, error: 'timeout' }
-    );
+    const cloudCoupons = await fetchEntityFromCloud<CouponItem[]>('coupons.json');
+    if (cloudCoupons && cloudCoupons.length > 0) {
+      cachedCoupons = cloudCoupons;
+      saveLocalCoupons(cloudCoupons);
+      return { data: cloudCoupons, error: null };
+    }
+  } catch {}
 
-    if (result.error || result.data === null || result.data.length === 0) {
-      if (isMissingTableError(result.error)) {
+  // 2. Try DB if table available
+  const client = dbClient();
+  if (client && isTableAvailable('coupons')) {
+    try {
+      const result = await withTimeout(
+        client.from('coupons').select('*').order('created_at', { ascending: false }) as any,
+        2500,
+        { data: null, error: 'timeout' }
+      );
+
+      if (result.data && result.data.length > 0) {
+        const formatted: CouponItem[] = result.data.map((c: any) => ({
+          id:           c.id,
+          code:         c.code,
+          discountType: c.discount_type,
+          value:        Number(c.value),
+          minSpend:     Number(c.min_spend),
+          expiryDate:   c.expiry_date,
+          usageLimit:   c.usage_limit,
+          timesUsed:    c.times_used,
+          active:       c.active
+        }));
+
+        cachedCoupons = formatted;
+        saveLocalCoupons(formatted);
+        syncEntityToCloud('coupons.json', formatted).catch(() => {});
+        return { data: formatted, error: null };
+      } else if (isMissingTableError(result.error)) {
         markTableUnavailable('coupons');
       }
-      cachedCoupons = local;
-      return { data: local, error: null };
-    }
-
-    const formatted: CouponItem[] = result.data.map((c: any) => ({
-      id:           c.id,
-      code:         c.code,
-      discountType: c.discount_type,
-      value:        Number(c.value),
-      minSpend:     Number(c.min_spend),
-      expiryDate:   c.expiry_date,
-      usageLimit:   c.usage_limit,
-      timesUsed:    c.times_used,
-      active:       c.active
-    }));
-
-    cachedCoupons = formatted;
-    saveLocalCoupons(formatted);
-    return { data: formatted, error: null };
-  } catch {
-    cachedCoupons = local;
-    return { data: local, error: null };
+    } catch {}
   }
+
+  const local = getLocalCoupons();
+  cachedCoupons = local;
+  return { data: local, error: null };
 }
 
 export async function createCoupon(coupon: Omit<CouponItem, 'id' | 'timesUsed'>): Promise<{ success: boolean; data: CouponItem }> {
@@ -1473,11 +2012,14 @@ export async function createCoupon(coupon: Omit<CouponItem, 'id' | 'timesUsed'>)
   };
 
   const list = getLocalCoupons();
-  saveLocalCoupons([newCoupon, ...list]);
+  const updated = [newCoupon, ...list];
+  saveLocalCoupons(updated);
+  syncEntityToCloud('coupons.json', updated).catch(() => {});
 
-  if (isTableAvailable('coupons')) {
+  const client = dbClient();
+  if (client && isTableAvailable('coupons')) {
     try {
-      const { error } = await supabase.from('coupons').upsert({
+      const { error } = await client.from('coupons').upsert({
         id:            newCoupon.id,
         code:          newCoupon.code,
         discount_type: newCoupon.discountType,
@@ -1502,11 +2044,13 @@ export async function toggleCouponStatus(id: string): Promise<{ success: boolean
   const list = getLocalCoupons();
   const updated = list.map(c => c.id === id ? { ...c, active: !c.active } : c);
   saveLocalCoupons(updated);
+  syncEntityToCloud('coupons.json', updated).catch(() => {});
   const found = updated.find(c => c.id === id);
 
-  if (isTableAvailable('coupons') && found) {
+  const client = dbClient();
+  if (client && isTableAvailable('coupons') && found) {
     try {
-      const { error } = await supabase.from('coupons').update({ active: found.active }).eq('id', id);
+      const { error } = await client.from('coupons').update({ active: found.active }).eq('id', id);
       if (isMissingTableError(error)) {
         markTableUnavailable('coupons');
       }
@@ -1519,11 +2063,14 @@ export async function toggleCouponStatus(id: string): Promise<{ success: boolean
 
 export async function deleteCoupon(id: string): Promise<{ success: boolean }> {
   const list = getLocalCoupons();
-  saveLocalCoupons(list.filter(c => c.id !== id));
+  const updated = list.filter(c => c.id !== id);
+  saveLocalCoupons(updated);
+  syncEntityToCloud('coupons.json', updated).catch(() => {});
 
-  if (isTableAvailable('coupons')) {
+  const client = dbClient();
+  if (client && isTableAvailable('coupons')) {
     try {
-      const { error } = await supabase.from('coupons').delete().eq('id', id);
+      const { error } = await client.from('coupons').delete().eq('id', id);
       if (isMissingTableError(error)) {
         markTableUnavailable('coupons');
       }
@@ -1541,7 +2088,7 @@ export async function deleteCoupon(id: string): Promise<{ success: boolean }> {
 const DEFAULT_SETTINGS: StoreSettingsItem = {
   announcementText:      'Complimentary Express Worldwide Delivery & Handloom Guarantee',
   conciergePhone:        '+91 73061 15950',
-  supportEmail:          'atelier@zaymera.com',
+  supportEmail:          'zaymerawardrobe@gmail.com',
   freeShippingThreshold: 0,
   storeTimings:          '10:00 AM – 9:00 PM IST',
   currencySymbol:        '₹',
@@ -1559,52 +2106,60 @@ export function saveLocalStoreSettings(settings: StoreSettingsItem) {
 
 export async function fetchStoreSettings(): Promise<{ data: StoreSettingsItem; error: any }> {
   if (cachedSettings) return { data: cachedSettings, error: null };
-  const local = getLocalStoreSettings();
 
-  if (!isTableAvailable('store_settings')) {
-    cachedSettings = local;
-    return { data: local, error: null };
-  }
-
+  // 1. Try cloud storage sync
   try {
-    const { data, error } = await supabase
-      .from('store_settings')
-      .select('*')
-      .eq('id', 'global')
-      .single();
+    const cloud = await fetchEntityFromCloud<StoreSettingsItem>('store_settings.json');
+    if (cloud) {
+      cachedSettings = cloud;
+      saveLocalStoreSettings(cloud);
+      return { data: cloud, error: null };
+    }
+  } catch {}
 
-    if (error || !data) {
-      if (isMissingTableError(error)) {
+  // 2. Try DB if table available
+  const client = dbClient();
+  if (client && isTableAvailable('store_settings')) {
+    try {
+      const { data, error } = await client
+        .from('store_settings')
+        .select('*')
+        .eq('id', 'global')
+        .single();
+
+      if (!error && data) {
+        const settings: StoreSettingsItem = {
+          announcementText:      data.announcement_text,
+          conciergePhone:        data.concierge_phone,
+          supportEmail:          data.support_email,
+          freeShippingThreshold: Number(data.free_shipping_threshold),
+          storeTimings:          data.store_timings,
+          currencySymbol:        data.currency_symbol,
+          whatsappMessage:       data.whatsapp_message
+        };
+        cachedSettings = settings;
+        saveLocalStoreSettings(settings);
+        syncEntityToCloud('store_settings.json', settings).catch(() => {});
+        return { data: settings, error: null };
+      } else if (isMissingTableError(error)) {
         markTableUnavailable('store_settings');
       }
-      cachedSettings = local;
-      return { data: local, error: null };
-    }
-
-    const settings: StoreSettingsItem = {
-      announcementText:      data.announcement_text,
-      conciergePhone:        data.concierge_phone,
-      supportEmail:          data.support_email,
-      freeShippingThreshold: Number(data.free_shipping_threshold),
-      storeTimings:          data.store_timings,
-      currencySymbol:        data.currency_symbol,
-      whatsappMessage:       data.whatsapp_message
-    };
-    cachedSettings = settings;
-    saveLocalStoreSettings(settings);
-    return { data: settings, error: null };
-  } catch {
-    cachedSettings = local;
-    return { data: local, error: null };
+    } catch {}
   }
+
+  const local = getLocalStoreSettings();
+  cachedSettings = local;
+  return { data: local, error: null };
 }
 
 export async function updateStoreSettings(settings: StoreSettingsItem): Promise<{ success: boolean; error: any }> {
   saveLocalStoreSettings(settings);
+  syncEntityToCloud('store_settings.json', settings).catch(() => {});
 
-  if (isTableAvailable('store_settings')) {
+  const client = dbClient();
+  if (client && isTableAvailable('store_settings')) {
     try {
-      const { error } = await supabase.from('store_settings').upsert({
+      const { error } = await client.from('store_settings').upsert({
         id:                      'global',
         announcement_text:       settings.announcementText,
         concierge_phone:         settings.conciergePhone,
@@ -1640,37 +2195,45 @@ export function saveLocalBanners(banners: BannerItem[]) {
 
 export async function fetchBanners(): Promise<{ data: BannerItem[]; error: any }> {
   if (cachedBanners && cachedBanners.length > 0) return { data: cachedBanners, error: null };
-  const local = getLocalBanners();
-  if (!isTableAvailable('banners')) {
-    cachedBanners = local;
-    return { data: local, error: null };
-  }
 
+  // 1. Try cloud storage sync
   try {
-    const { data, error } = await supabase
-      .from('banners')
-      .select('*')
-      .eq('active', true)
-      .order('sort_order', { ascending: true });
+    const cloud = await fetchEntityFromCloud<BannerItem[]>('banners.json');
+    if (cloud && cloud.length > 0) {
+      cachedBanners = cloud;
+      saveLocalBanners(cloud);
+      return { data: cloud, error: null };
+    }
+  } catch {}
 
-    if (error || !data || data.length === 0) {
-      if (isMissingTableError(error)) {
+  // 2. Try DB if table available
+  const client = dbClient();
+  if (client && isTableAvailable('banners')) {
+    try {
+      const { data, error } = await client
+        .from('banners')
+        .select('*')
+        .eq('active', true)
+        .order('sort_order', { ascending: true });
+
+      if (data && data.length > 0) {
+        const formatted: BannerItem[] = data.map((b: any) => ({
+          id: b.id, title: b.title, subtitle: b.subtitle,
+          image: b.image, link: b.link, sortOrder: b.sort_order, active: b.active
+        }));
+        cachedBanners = formatted;
+        saveLocalBanners(formatted);
+        syncEntityToCloud('banners.json', formatted).catch(() => {});
+        return { data: formatted, error: null };
+      } else if (isMissingTableError(error)) {
         markTableUnavailable('banners');
       }
-      cachedBanners = local;
-      return { data: local, error: null };
-    }
-
-    const formatted: BannerItem[] = data.map((b: any) => ({
-      id: b.id, title: b.title, subtitle: b.subtitle,
-      image: b.image, link: b.link, sortOrder: b.sort_order, active: b.active
-    }));
-    cachedBanners = formatted;
-    saveLocalBanners(formatted);
-    return { data: formatted, error: null };
-  } catch {
-    return { data: local, error: null };
+    } catch {}
   }
+
+  const local = getLocalBanners();
+  cachedBanners = local;
+  return { data: local, error: null };
 }
 
 export async function createBanner(
@@ -1694,11 +2257,14 @@ export async function createBanner(
   };
 
   const list = getLocalBanners();
-  saveLocalBanners([...list, newBanner]);
+  const updated = [...list, newBanner];
+  saveLocalBanners(updated);
+  syncEntityToCloud('banners.json', updated).catch(() => {});
 
-  if (isTableAvailable('banners')) {
+  const client = dbClient();
+  if (client && isTableAvailable('banners')) {
     try {
-      const { error } = await supabase.from('banners').upsert({
+      const { error } = await client.from('banners').upsert({
         id: newBanner.id, title: newBanner.title, subtitle: newBanner.subtitle,
         image: newBanner.image, link: newBanner.link,
         sort_order: newBanner.sortOrder, active: newBanner.active
@@ -1720,9 +2286,12 @@ export async function updateBanner(id: string, updates: Partial<BannerItem> & { 
   }
 
   const list = getLocalBanners();
-  saveLocalBanners(list.map(b => b.id === id ? { ...b, ...updates } : b));
+  const updated = list.map(b => b.id === id ? { ...b, ...updates } : b);
+  saveLocalBanners(updated);
+  syncEntityToCloud('banners.json', updated).catch(() => {});
 
-  if (isTableAvailable('banners')) {
+  const client = dbClient();
+  if (client && isTableAvailable('banners')) {
     try {
       const dbPayload: Record<string, any> = {};
       if (updates.title     !== undefined) dbPayload.title      = updates.title;
@@ -1731,7 +2300,7 @@ export async function updateBanner(id: string, updates: Partial<BannerItem> & { 
       if (updates.link      !== undefined) dbPayload.link       = updates.link;
       if (updates.sortOrder !== undefined) dbPayload.sort_order = updates.sortOrder;
       if (updates.active    !== undefined) dbPayload.active     = updates.active;
-      const { error } = await supabase.from('banners').update(dbPayload).eq('id', id);
+      const { error } = await client.from('banners').update(dbPayload).eq('id', id);
       if (isMissingTableError(error)) {
         markTableUnavailable('banners');
       }
@@ -1745,7 +2314,9 @@ export async function updateBanner(id: string, updates: Partial<BannerItem> & { 
 export async function deleteBanner(id: string): Promise<{ success: boolean }> {
   const list = getLocalBanners();
   const found = list.find(b => b.id === id);
-  saveLocalBanners(list.filter(b => b.id !== id));
+  const updated = list.filter(b => b.id !== id);
+  saveLocalBanners(updated);
+  syncEntityToCloud('banners.json', updated).catch(() => {});
 
   // Delete image from storage
   if (found?.image) {
@@ -1753,9 +2324,10 @@ export async function deleteBanner(id: string): Promise<{ success: boolean }> {
     if (path) deleteImageFile('banner-images', path).catch(() => {});
   }
 
-  if (isTableAvailable('banners')) {
+  const client = dbClient();
+  if (client && isTableAvailable('banners')) {
     try {
-      const { error } = await supabase.from('banners').delete().eq('id', id);
+      const { error } = await client.from('banners').delete().eq('id', id);
       if (isMissingTableError(error)) {
         markTableUnavailable('banners');
       }

@@ -3,28 +3,7 @@
   "pages404": true,
   "caseSensitive": false,
   "basePath": "",
-  "redirects": [
-    {
-      "source": "/:file((?!\\.well-known(?:/.*)?)(?:[^/]+/)*[^/]+\\.\\w+)/",
-      "destination": "/:file",
-      "internal": true,
-      "missing": [
-        {
-          "type": "header",
-          "key": "x-nextjs-data"
-        }
-      ],
-      "statusCode": 308,
-      "regex": "^(?:/((?!\\.well-known(?:/.*)?)(?:[^/]+/)*[^/]+\\.\\w+))/$"
-    },
-    {
-      "source": "/:notfile((?!\\.well-known(?:/.*)?)(?:[^/]+/)*[^/\\.]+)",
-      "destination": "/:notfile/",
-      "internal": true,
-      "statusCode": 308,
-      "regex": "^(?:/((?!\\.well-known(?:/.*)?)(?:[^/]+/)*[^/\\.]+))$"
-    }
-  ],
+  "redirects": [],
   "headers": [],
   "rewrites": {
     "beforeFiles": [],
@@ -82,6 +61,12 @@
       "namedRegex": "^/admin/inquiries(?:/)?$"
     },
     {
+      "page": "/admin/inventory",
+      "regex": "^/admin/inventory(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/admin/inventory(?:/)?$"
+    },
+    {
       "page": "/admin/login",
       "regex": "^/admin/login(?:/)?$",
       "routeKeys": {},
@@ -124,10 +109,28 @@
       "namedRegex": "^/admin/signup(?:/)?$"
     },
     {
+      "page": "/cart",
+      "regex": "^/cart(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/cart(?:/)?$"
+    },
+    {
       "page": "/login",
       "regex": "^/login(?:/)?$",
       "routeKeys": {},
       "namedRegex": "^/login(?:/)?$"
+    },
+    {
+      "page": "/order-success",
+      "regex": "^/order\\-success(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/order\\-success(?:/)?$"
+    },
+    {
+      "page": "/orders",
+      "regex": "^/orders(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/orders(?:/)?$"
     },
     {
       "page": "/privacy",

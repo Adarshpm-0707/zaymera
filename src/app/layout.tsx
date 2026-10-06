@@ -3,6 +3,7 @@ import { Plus_Jakarta_Sans, Tenor_Sans, Italiana } from 'next/font/google';
 import { AppProviders } from '@/providers';
 import { SITE_CONFIG } from '@/constants/siteConfig';
 import type { Viewport } from 'next';
+import Script from 'next/script';
 import './globals.css';
 
 export const viewport: Viewport = {
@@ -55,6 +56,10 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning className={`${plusJakartaSans.variable} ${tenorSans.variable} ${italiana.variable}`}>
       <body suppressHydrationWarning className="bg-[#FAF8F5] text-[#221C18] antialiased selection:bg-[#9B2242] selection:text-white font-sans">
+        <Script
+          src="https://checkout.razorpay.com/v1/checkout.js"
+          strategy="lazyOnload"
+        />
         <AppProviders>{children}</AppProviders>
       </body>
     </html>

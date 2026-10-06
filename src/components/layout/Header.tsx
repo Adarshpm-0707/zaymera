@@ -14,7 +14,8 @@ import {
   Search,
   User,
   Package,
-  ArrowRight
+  ArrowRight,
+  ShoppingBag
 } from 'lucide-react';
 import { NAV_CATEGORIES, circleLogoImg } from '@/constants/catalog';
 import { WhatsAppIcon } from '@/components/icons/WhatsAppIcon';
@@ -22,14 +23,14 @@ import { SITE_CONFIG } from '@/constants/siteConfig';
 import { fetchCategories, CategoryItem, DEFAULT_CATEGORIES } from '@/lib/supabase/services';
 
 interface HeaderProps {
-  onOpenCart: () => void;
-  cartCount: number;
-  onOpenWishlist: () => void;
-  wishlistCount: number;
-  onSelectCategory: (category: string) => void;
-  onToggleMegaMenu: () => void;
-  isMegaMenuOpen: boolean;
-  onOpenTrackOrder: () => void;
+  onOpenCart?: () => void;
+  cartCount?: number;
+  onOpenWishlist?: () => void;
+  wishlistCount?: number;
+  onSelectCategory?: (category: string) => void;
+  onToggleMegaMenu?: () => void;
+  isMegaMenuOpen?: boolean;
+  onOpenTrackOrder?: () => void;
   onOpenSearch?: () => void;
   onOpenAuth?: () => void;
   categories?: CategoryItem[];
@@ -37,12 +38,12 @@ interface HeaderProps {
 
 export const Header: React.FC<HeaderProps> = ({
   onOpenCart,
-  cartCount,
+  cartCount = 0,
   onOpenWishlist,
-  wishlistCount,
+  wishlistCount = 0,
   onSelectCategory,
   onToggleMegaMenu,
-  isMegaMenuOpen,
+  isMegaMenuOpen = false,
   onOpenTrackOrder,
   onOpenSearch,
   onOpenAuth,
@@ -79,6 +80,7 @@ export const Header: React.FC<HeaderProps> = ({
     if (slug === 'products-page') return '/products';
     if (slug === 'new-arrivals') return '/products?filter=new-arrivals';
     if (slug === 'most-selling') return '/products?filter=bestseller';
+    if (slug === 'orders' || slug === 'my-orders') return '/orders';
     return null;
   };
 
@@ -87,6 +89,8 @@ export const Header: React.FC<HeaderProps> = ({
       onToggleMegaMenu();
     } else if (slug === 'products-page') {
       router.push('/products');
+    } else if (slug === 'orders' || slug === 'my-orders') {
+      router.push('/orders');
     } else if (slug === 'track-order') {
       onOpenTrackOrder();
     } else {
@@ -226,7 +230,7 @@ export const Header: React.FC<HeaderProps> = ({
 
               {/* Shopping Cart Button with Badge */}
               <button
-                onClick={onOpenCart}
+                onClick={onOpenCart || (() => router.push('/cart'))}
                 className="relative p-2 text-[#3D352E] hover:text-[#9B2242] transition-colors rounded-full hover:bg-[#FAF4EA] cursor-pointer min-w-[36px] min-h-[36px] sm:min-w-[40px] sm:min-h-[40px] flex items-center justify-center group"
                 aria-label="Shopping Cart"
                 title="View Shopping Bag"
@@ -404,6 +408,30 @@ export const Header: React.FC<HeaderProps> = ({
                     <ArrowRight className="w-3.5 h-3.5 text-[#8C7A68]" />
                   </button>
                 )}
+
+                <Link
+                  href="/cart"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="w-full py-2.5 px-3.5 rounded-xl bg-white border border-[#EAE1D2] text-[#3D352E] font-medium text-xs flex items-center justify-between hover:border-[#9B2242] hover:text-[#9B2242] transition-colors cursor-pointer"
+                >
+                  <span className="flex items-center gap-2">
+                    <ShoppingCart className="w-4 h-4 text-[#9B2242]" />
+                    <span>Shopping Bag ({cartCount})</span>
+                  </span>
+                  <ArrowRight className="w-3.5 h-3.5 text-[#8C7A68]" />
+                </Link>
+
+                <Link
+                  href="/orders"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="w-full py-2.5 px-3.5 rounded-xl bg-white border border-[#EAE1D2] text-[#3D352E] font-medium text-xs flex items-center justify-between hover:border-[#9B2242] hover:text-[#9B2242] transition-colors cursor-pointer"
+                >
+                  <span className="flex items-center gap-2">
+                    <ShoppingBag className="w-4 h-4 text-[#9B2242]" />
+                    <span>My Orders & Purchases</span>
+                  </span>
+                  <ArrowRight className="w-3.5 h-3.5 text-[#8C7A68]" />
+                </Link>
 
                 <button
                   onClick={() => {

@@ -7,6 +7,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import {
   LayoutDashboard,
   Package,
+  Boxes,
   PlusCircle,
   ShoppingBag,
   Layers,
@@ -48,6 +49,12 @@ const NAV_ITEMS = [
     href: '/admin/products',
     icon: Package,
     badge: null,
+  },
+  {
+    label: 'Inventory & Stock',
+    href: '/admin/inventory',
+    icon: Boxes,
+    badge: 'New',
   },
   {
     label: 'Add New Product',

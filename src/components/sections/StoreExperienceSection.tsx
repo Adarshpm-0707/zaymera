@@ -62,12 +62,17 @@ const ProductCard: React.FC<{
     { size: 'XXL', inStock: true }
   ];
 
+  const stockVal = product.stock !== undefined ? product.stock : (product.inStock ? 10 : 0);
+  const isOutOfStock = stockVal <= 0 || product.inStock === false;
+  const isLowStock = !isOutOfStock && stockVal <= 5;
+
   const defaultSize = availableSizes.find(s => s.inStock)?.size || availableSizes[0]?.size || 'XL';
   const [selectedSize, setSelectedSize] = useState<string>(defaultSize);
   const [isAdded, setIsAdded] = useState(false);
 
   const handleAdd = (e: React.MouseEvent) => {
     e.stopPropagation();
+    if (isOutOfStock) return;
     onAddToCart(product, selectedSize);
     setIsAdded(true);
     setTimeout(() => setIsAdded(false), 1400);
@@ -75,6 +80,7 @@ const ProductCard: React.FC<{
 
   const handleBuy = (e: React.MouseEvent) => {
     e.stopPropagation();
+    if (isOutOfStock) return;
     if (onBuyNow) {
       onBuyNow(product, selectedSize);
     } else {
@@ -92,8 +98,10 @@ const ProductCard: React.FC<{
         delay: (index % 4) * 0.08,
         ease: [0.16, 1, 0.3, 1]
       }}
-      whileHover={{ y: -4 }}
-      className="group rounded-xl sm:rounded-2xl bg-white border border-[#E8DFCE] overflow-hidden shadow-sm hover:shadow-xl transition-all duration-300 flex flex-col justify-between"
+      whileHover={{ y: isOutOfStock ? 0 : -4 }}
+      className={`group rounded-xl sm:rounded-2xl bg-white border border-[#E8DFCE] overflow-hidden shadow-sm transition-all duration-300 flex flex-col justify-between ${
+        isOutOfStock ? 'opacity-90' : 'hover:shadow-xl'
+      }`}
     >
       <div>
         {/* Product Visual Lookbook Container */}
@@ -104,15 +112,36 @@ const ProductCard: React.FC<{
           <img
             src={product.image}
             alt={product.name}
-            className="w-full h-full object-cover transform group-hover:scale-105 transition-transform duration-700"
+            className={`w-full h-full object-cover transform transition-transform duration-700 ${
+              isOutOfStock ? 'grayscale-[35%]' : 'group-hover:scale-105'
+            }`}
           />
           
-          {/* Top Tag Badge */}
-          <div className="absolute top-1.5 left-1.5 sm:top-2.5 sm:left-2.5 z-10">
-            <span className="bg-white/95 backdrop-blur-sm text-[#9B2242] text-[8px] sm:text-[9.5px] md:text-[10px] font-jakarta font-bold uppercase tracking-wider px-1.5 sm:px-2.5 py-0.5 sm:py-1 rounded-full shadow-sm">
-              {product.tag}
-            </span>
+          {/* Top Badges (Tag + Urgency Low Stock) */}
+          <div className="absolute top-1.5 left-1.5 sm:top-2.5 sm:left-2.5 z-10 flex flex-col gap-1 items-start">
+            {product.tag && (
+              <span className="bg-white/95 backdrop-blur-sm text-[#9B2242] text-[8px] sm:text-[9.5px] md:text-[10px] font-jakarta font-bold uppercase tracking-wider px-1.5 sm:px-2.5 py-0.5 sm:py-1 rounded-full shadow-sm">
+                {product.tag}
+              </span>
+            )}
+            {isLowStock && (
+              <span className="bg-gradient-to-r from-[#B45309] to-[#D97706] text-white text-[8px] sm:text-[9px] md:text-[9.5px] font-jakarta font-bold uppercase tracking-wider px-2 py-0.5 rounded-full shadow-md animate-pulse">
+                Only {stockVal} Left!
+              </span>
+            )}
           </div>
+
+          {/* Out of Stock Overlay */}
+          {isOutOfStock && (
+            <div className="absolute inset-0 bg-black/60 backdrop-blur-[2px] z-10 flex flex-col items-center justify-center p-2 text-center pointer-events-none">
+              <span className="bg-[#DC2626] text-white text-[9.5px] sm:text-[11px] font-jakarta font-bold uppercase tracking-widest px-3 py-1 rounded-full shadow-lg">
+                Out of Stock
+              </span>
+              <span className="text-white/80 text-[8.5px] sm:text-[9.5px] mt-1 font-medium">
+                Currently Unavailable
+              </span>
+            </div>
+          )}
 
           {/* Wishlist Heart Button */}
           <button
@@ -235,33 +264,41 @@ const ProductCard: React.FC<{
         </div>
       </div>
 
-      {/* Dual Bottom Action Buttons (Add to Cart & Buy Now) */}
+      {/* Dual Bottom Action Buttons (Add to Cart & Buy Now) or Blocked Out-of-Stock */}
       <div className="p-3 sm:p-1.5 md:p-2.5 lg:p-3 pt-1.5 sm:pt-1 md:pt-1.5 grid grid-cols-2 gap-2 sm:gap-1 md:gap-1.5 lg:gap-2 border-t border-[#F2ECE1] mt-1 bg-[#FAF8F5]/60">
-        <button
-          type="button"
-          onClick={handleAdd}
-          className="w-full py-2 sm:py-1.5 md:py-2 px-2 sm:px-1 rounded-lg sm:rounded md:rounded-lg bg-[#D81B60] hover:bg-[#C2185B] text-white text-[11px] sm:text-[9px] md:text-[10px] lg:text-[11px] font-jakarta font-bold tracking-normal sm:tracking-tight md:tracking-wide flex items-center justify-center gap-1 sm:gap-0.5 md:gap-1 transition-all active:scale-95 cursor-pointer shadow-sm min-h-[34px] sm:min-h-[28px] md:min-h-[34px]"
-        >
-          {isAdded ? (
-            <>
-              <Check className="w-3.5 h-3.5 sm:w-3 sm:h-3 md:w-3.5 md:h-3.5" />
-              <span>Added!</span>
-            </>
-          ) : (
-            <>
-              <ShoppingCart className="w-3.5 h-3.5 sm:w-3 sm:h-3 md:w-3.5 md:h-3.5 shrink-0" />
-              <span className="truncate">Add to Cart</span>
-            </>
-          )}
-        </button>
+        {isOutOfStock ? (
+          <div className="col-span-2 w-full py-2 sm:py-1.5 md:py-2 px-2 rounded-lg sm:rounded md:rounded-lg bg-[#F5ECE1] border border-[#E2D4C0] text-[#8C7667] text-[11px] sm:text-[9.5px] md:text-[10px] lg:text-[11px] font-jakarta font-bold tracking-wide flex items-center justify-center min-h-[34px] sm:min-h-[28px] md:min-h-[34px] select-none cursor-not-allowed">
+            <span>Out of Stock</span>
+          </div>
+        ) : (
+          <>
+            <button
+              type="button"
+              onClick={handleAdd}
+              className="w-full py-2 sm:py-1.5 md:py-2 px-2 sm:px-1 rounded-lg sm:rounded md:rounded-lg bg-[#D81B60] hover:bg-[#C2185B] text-white text-[11px] sm:text-[9px] md:text-[10px] lg:text-[11px] font-jakarta font-bold tracking-normal sm:tracking-tight md:tracking-wide flex items-center justify-center gap-1 sm:gap-0.5 md:gap-1 transition-all active:scale-95 cursor-pointer shadow-sm min-h-[34px] sm:min-h-[28px] md:min-h-[34px]"
+            >
+              {isAdded ? (
+                <>
+                  <Check className="w-3.5 h-3.5 sm:w-3 sm:h-3 md:w-3.5 md:h-3.5" />
+                  <span>Added!</span>
+                </>
+              ) : (
+                <>
+                  <ShoppingCart className="w-3.5 h-3.5 sm:w-3 sm:h-3 md:w-3.5 md:h-3.5 shrink-0" />
+                  <span className="truncate">Add to Cart</span>
+                </>
+              )}
+            </button>
 
-        <button
-          type="button"
-          onClick={handleBuy}
-          className="w-full py-2 sm:py-1.5 md:py-2 px-2 sm:px-1 rounded-lg sm:rounded md:rounded-lg bg-[#16A34A] hover:bg-[#15803D] text-white text-[11px] sm:text-[9px] md:text-[10px] lg:text-[11px] font-jakarta font-bold tracking-normal sm:tracking-tight md:tracking-wide flex items-center justify-center gap-1 sm:gap-0.5 md:gap-1 transition-all active:scale-95 cursor-pointer shadow-sm min-h-[34px] sm:min-h-[28px] md:min-h-[34px] truncate"
-        >
-          <span>Buy Now</span>
-        </button>
+            <button
+              type="button"
+              onClick={handleBuy}
+              className="w-full py-2 sm:py-1.5 md:py-2 px-2 sm:px-1 rounded-lg sm:rounded md:rounded-lg bg-[#16A34A] hover:bg-[#15803D] text-white text-[11px] sm:text-[9px] md:text-[10px] lg:text-[11px] font-jakarta font-bold tracking-normal sm:tracking-tight md:tracking-wide flex items-center justify-center gap-1 sm:gap-0.5 md:gap-1 transition-all active:scale-95 cursor-pointer shadow-sm min-h-[34px] sm:min-h-[28px] md:min-h-[34px] truncate"
+            >
+              <span>Buy Now</span>
+            </button>
+          </>
+        )}
       </div>
     </motion.div>
   );

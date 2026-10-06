@@ -21,11 +21,15 @@ CREATE TABLE IF NOT EXISTS public.products (
   fabric         TEXT        NOT NULL DEFAULT '',
   work           TEXT        NOT NULL DEFAULT '',
   in_stock       BOOLEAN     NOT NULL DEFAULT TRUE,
+  stock          INTEGER     NOT NULL DEFAULT 10,
   sizes          JSONB       NOT NULL DEFAULT '[]',
   section        TEXT        NOT NULL DEFAULT 'products',
   created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+-- Ensure stock column exists if table was already created
+ALTER TABLE public.products ADD COLUMN IF NOT EXISTS stock INTEGER NOT NULL DEFAULT 10;
 
 -- Auto-update updated_at
 CREATE OR REPLACE FUNCTION public.set_updated_at()
@@ -152,7 +156,7 @@ CREATE TABLE IF NOT EXISTS public.store_settings (
   id                       TEXT    PRIMARY KEY DEFAULT 'global',
   announcement_text        TEXT    NOT NULL DEFAULT 'Complimentary Express Worldwide Delivery & Handloom Guarantee',
   concierge_phone          TEXT    NOT NULL DEFAULT '+91 73061 15950',
-  support_email            TEXT    NOT NULL DEFAULT 'atelier@zaymera.com',
+  support_email            TEXT    NOT NULL DEFAULT 'zaymerawardrobe@gmail.com',
   free_shipping_threshold  NUMERIC NOT NULL DEFAULT 0,
   store_timings            TEXT    NOT NULL DEFAULT '10:00 AM – 9:00 PM IST',
   currency_symbol          TEXT    NOT NULL DEFAULT '₹',
@@ -161,11 +165,27 @@ CREATE TABLE IF NOT EXISTS public.store_settings (
 );
 
 -- Insert default settings row if not present
-INSERT INTO public.store_settings (id) VALUES ('global')
-ON CONFLICT (id) DO NOTHING;
+INSERT INTO public.store_settings (id, support_email) VALUES ('global', 'zaymerawardrobe@gmail.com')
+ON CONFLICT (id) DO UPDATE SET support_email = 'zaymerawardrobe@gmail.com';
 
 -- ─────────────────────────────────────────
--- 9. DISABLE RLS & GRANT PERMISSIONS
+-- 9. TRANSACTIONAL EMAIL LOGS
+-- ─────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS public.email_logs (
+  id             TEXT        PRIMARY KEY DEFAULT gen_random_uuid()::TEXT,
+  order_number   TEXT,
+  recipient      TEXT        NOT NULL,
+  recipient_role TEXT        NOT NULL DEFAULT 'customer',
+  email_type     TEXT        NOT NULL,
+  subject        TEXT        NOT NULL,
+  status         TEXT        NOT NULL DEFAULT 'sent',
+  error_message  TEXT,
+  html_preview   TEXT,
+  created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- ─────────────────────────────────────────
+-- 10. DISABLE RLS & GRANT PERMISSIONS
 -- ─────────────────────────────────────────
 ALTER TABLE public.products       DISABLE ROW LEVEL SECURITY;
 ALTER TABLE public.categories     DISABLE ROW LEVEL SECURITY;
@@ -175,6 +195,7 @@ ALTER TABLE public.inquiries      DISABLE ROW LEVEL SECURITY;
 ALTER TABLE public.coupons        DISABLE ROW LEVEL SECURITY;
 ALTER TABLE public.banners        DISABLE ROW LEVEL SECURITY;
 ALTER TABLE public.store_settings DISABLE ROW LEVEL SECURITY;
+ALTER TABLE public.email_logs     DISABLE ROW LEVEL SECURITY;
 
 GRANT USAGE ON SCHEMA public TO anon, authenticated, service_role;
 GRANT ALL ON ALL TABLES IN SCHEMA public TO anon, authenticated, service_role;

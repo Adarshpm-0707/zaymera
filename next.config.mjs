@@ -1,8 +1,9 @@
-const isProd = process.env.NODE_ENV === 'production';
+const isStaticExport = process.env.STATIC_EXPORT === 'true';
 
 const nextConfig = {
-  ...(isProd ? { output: 'export' } : {}),
+  ...(isStaticExport ? { output: 'export' } : {}),
   trailingSlash: true,
+  skipTrailingSlashRedirect: true,
   reactStrictMode: true,
   compress: true,
   devIndicators: false,

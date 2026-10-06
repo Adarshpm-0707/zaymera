@@ -20,11 +20,13 @@ import {
   Database,
   CloudUpload,
   Copy,
-  Download
+  Download,
+  Boxes
 } from 'lucide-react';
 import {
   fetchProducts,
   updateProduct,
+  updateProductStock,
   deleteProduct,
   deleteAllProducts,
   seedInitialCatalogToSupabase,
@@ -42,7 +44,7 @@ export default function AdminProductsPage() {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
-  const [stockFilter, setStockFilter] = useState<'all' | 'inStock' | 'outOfStock'>('all');
+  const [stockFilter, setStockFilter] = useState<'all' | 'inStock' | 'lowStock' | 'outOfStock'>('all');
 
   // Supabase Database Connection & Sync Status
   const [dbStatus, setDbStatus] = useState<{
@@ -331,13 +333,18 @@ NOTIFY pgrst, 'reload schema';
       p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       p.category.toLowerCase().includes(searchTerm.toLowerCase()) ||
       p.fabric?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      p.tag?.toLowerCase().includes(searchTerm.toLowerCase());
+      Boolean(p.tag?.toLowerCase().includes(searchTerm.toLowerCase()));
 
-    const matchesCategory = selectedCategory === 'all' || p.category === selectedCategory;
+    const matchesCategory = 
+      selectedCategory === 'all' || 
+      p.category.toLowerCase() === selectedCategory.toLowerCase();
+
+    const stockQty = p.stock !== undefined ? p.stock : (p.inStock ? 10 : 0);
     const matchesStock = 
       stockFilter === 'all' || 
-      (stockFilter === 'inStock' && p.inStock) || 
-      (stockFilter === 'outOfStock' && !p.inStock);
+      (stockFilter === 'inStock' && stockQty > 5 && p.inStock) || 
+      (stockFilter === 'lowStock' && stockQty <= 5 && stockQty > 0 && p.inStock) ||
+      (stockFilter === 'outOfStock' && (stockQty === 0 || !p.inStock));
 
     return matchesSearch && matchesCategory && matchesStock;
   });
@@ -400,6 +407,14 @@ NOTIFY pgrst, 'reload schema';
               <span className="hidden xs:inline">Delete All</span>
             </button>
           )}
+
+          <Link
+            href="/admin/inventory"
+            className="inline-flex items-center gap-1.5 sm:gap-2 bg-[#FAF5EC] hover:bg-[#F3E7D3] border border-[#EBDCC5] text-[#936718] text-xs font-bold px-3.5 sm:px-4 py-2 sm:py-2.5 rounded-xl transition-all shadow-xs active:scale-95 cursor-pointer shrink-0"
+          >
+            <Boxes className="w-4 h-4 text-[#936718]" />
+            <span>Manage Inventory</span>
+          </Link>
 
           <Link
             href="/admin/products/new"
@@ -569,8 +584,9 @@ NOTIFY pgrst, 'reload schema';
             className="w-full px-3.5 py-2.5 rounded-xl bg-white border border-[#DDD4C5] text-xs text-[#1C1613] focus:outline-none focus:border-[#C5A059] cursor-pointer shadow-xs"
           >
             <option value="all" className="bg-white text-[#1C1613]">All Stock Statuses</option>
-            <option value="inStock" className="bg-white text-[#1C1613]">In Stock Only</option>
-            <option value="outOfStock" className="bg-white text-[#1C1613]">Out of Stock Only</option>
+            <option value="inStock" className="bg-white text-[#1C1613]">In Stock (&gt;5 Units)</option>
+            <option value="lowStock" className="bg-white text-[#1C1613]">Low Stock (≤5 Units)</option>
+            <option value="outOfStock" className="bg-white text-[#1C1613]">Out of Stock (0 Units)</option>
           </select>
         </div>
       </div>
@@ -601,6 +617,21 @@ NOTIFY pgrst, 'reload schema';
                       {prod.tag}
                     </span>
                   )}
+                  {prod.stock !== undefined ? (
+                    prod.stock <= 0 ? (
+                      <span className="text-[9px] font-bold uppercase tracking-wider bg-[#FEF2F2] text-[#B91C1C] px-2 py-0.5 rounded-full border border-[#FECACA]">
+                        0 left (Sold Out)
+                      </span>
+                    ) : prod.stock <= 5 ? (
+                      <span className="text-[9px] font-bold uppercase tracking-wider bg-[#FFFBEB] text-[#B45309] px-2 py-0.5 rounded-full border border-[#FDE68A] animate-pulse">
+                        Only {prod.stock} Left!
+                      </span>
+                    ) : (
+                      <span className="text-[9px] font-bold uppercase tracking-wider bg-[#ECFDF5] text-[#15803D] px-2 py-0.5 rounded-full border border-[#86EFAC]">
+                        {prod.stock} units
+                      </span>
+                    )
+                  ) : null}
                 </div>
 
                 <h3 className="text-xs font-semibold text-[#1C1613] line-clamp-2 uppercase tracking-wide mt-1">
@@ -684,6 +715,7 @@ NOTIFY pgrst, 'reload schema';
                 <th className="py-3.5 px-4">Price</th>
                 <th className="py-3.5 px-4">Fabric / Work</th>
                 <th className="py-3.5 px-4">Sizes</th>
+                <th className="py-3.5 px-4 text-center">Inventory Stock</th>
                 <th className="py-3.5 px-4 text-center">Status</th>
                 <th className="py-3.5 px-4 sm:px-6 text-right">Actions</th>
               </tr>
@@ -754,6 +786,26 @@ NOTIFY pgrst, 'reload schema';
                         </span>
                       ))}
                     </div>
+                  </td>
+
+                  {/* Inventory Stock Count */}
+                  <td className="py-3.5 px-4 text-center">
+                    {(prod.stock !== undefined && prod.stock <= 0) || !prod.inStock ? (
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider bg-[#FEF2F2] text-[#B91C1C] border border-[#FECACA]">
+                        <span className="w-1.5 h-1.5 rounded-full bg-[#DC2626]" />
+                        0 Units (Sold Out)
+                      </span>
+                    ) : (prod.stock !== undefined && prod.stock <= 5) ? (
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider bg-[#FFFBEB] text-[#B45309] border border-[#FDE68A]">
+                        <span className="w-1.5 h-1.5 rounded-full bg-[#D97706] animate-pulse" />
+                        Only {prod.stock} Left!
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider bg-[#ECFDF5] text-[#15803D] border border-[#86EFAC]">
+                        <span className="w-1.5 h-1.5 rounded-full bg-[#16A34A]" />
+                        {prod.stock ?? 10} Units
+                      </span>
+                    )}
                   </td>
 
                   {/* Stock Toggle Switch */}
