@@ -570,6 +570,9 @@ export const StoreExperienceSection: React.FC<StoreExperienceSectionProps> = ({
                   <img
                     src={cat.image || '/images/royal_blue_anarkali_1788292199640.jpg'}
                     alt={cat.title}
+                    onError={(e) => {
+                      (e.target as HTMLImageElement).src = '/images/royal_blue_anarkali_1788292199640.jpg';
+                    }}
                     className="w-full h-full object-cover group-hover:scale-108 transition-transform duration-700"
                   />
                   <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/25 to-transparent flex flex-col justify-end p-3.5 sm:p-4 text-white">

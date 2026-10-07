@@ -76,6 +76,9 @@ export const CategoryMegaMenu: React.FC<CategoryMegaMenuProps> = ({
                 <img
                   src={tile.image || '/images/royal_blue_anarkali_1788292199640.jpg'}
                   alt={tile.title}
+                  onError={(e) => {
+                    (e.target as HTMLImageElement).src = '/images/royal_blue_anarkali_1788292199640.jpg';
+                  }}
                   className="w-full h-full object-cover object-center group-hover:scale-105 transition-transform duration-700 ease-out"
                 />
                 <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/35 to-transparent" />

@@ -262,10 +262,31 @@ export async function uploadImageFile(
     const client = dbClient();
 
     if (isSupabaseConfigured && client) {
-      const { data, error } = await client.storage.from(bucket).upload(filePath, file, {
+      let { data, error } = await client.storage.from(bucket).upload(filePath, file, {
         cacheControl: '3600',
         upsert: true,
       });
+
+      // Auto-create bucket if it doesn't exist and retry
+      if (error && supabaseAdmin && (error.message?.includes('bucket') || (error as any).statusCode === 404 || (error as any).status === 404)) {
+        try {
+          await supabaseAdmin.storage.createBucket(bucket, {
+            public: true,
+            fileSizeLimit: 15 * 1024 * 1024,
+            allowedMimeTypes: ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/gif', 'image/svg+xml']
+          });
+          const retry = await supabaseAdmin.storage.from(bucket).upload(filePath, file, {
+            cacheControl: '3600',
+            upsert: true,
+          });
+          if (!retry.error && retry.data) {
+            data = retry.data;
+            error = null;
+          }
+        } catch {
+          // ignore retry failure, will fallback to FileReader
+        }
+      }
 
       if (!error && data) {
         const { data: urlData } = client.storage.from(bucket).getPublicUrl(filePath);
@@ -1721,29 +1742,25 @@ export async function fetchCategories(): Promise<{ data: CategoryItem[]; error: 
 }
 
 async function _refreshCategoriesFromDb(): Promise<{ data: CategoryItem[]; error: any }> {
-  // 1. Fetch from Supabase Cloud Storage (authoritative across all devices for admin-added categories)
-  try {
-    const cloudCategories = await fetchCategoriesFromCloud();
-    if (cloudCategories !== null && cloudCategories.length > 0) {
-      cachedCategories = cloudCategories;
-      saveLocalCategories(cloudCategories);
-      return { data: cloudCategories, error: null };
-    }
-  } catch {}
-
-  // 2. Also try SQL table if available
   const client = dbClient();
+
+  // 1. Primary: Fetch from live Supabase PostgreSQL 'categories' table
   if (client && isTableAvailable('categories')) {
     try {
       const result = await withTimeout(
         client.from('categories').select('*').order('sort_order', { ascending: true }) as any,
-        3000,
+        4000,
         { data: null, error: 'timeout' }
       );
       if (result.data && result.data.length > 0) {
         const formatted: CategoryItem[] = result.data.map((c: any) => ({
-          id: c.id, title: c.title, slug: c.slug, count: c.count,
-          image: c.image, description: c.description, featured: c.featured
+          id:          c.id,
+          title:       c.title,
+          slug:        c.slug,
+          count:       c.count || '0 Styles',
+          image:       c.image || '',
+          description: c.description || '',
+          featured:    c.featured ?? false
         }));
         cachedCategories = formatted;
         saveLocalCategories(formatted);
@@ -1757,7 +1774,17 @@ async function _refreshCategoriesFromDb(): Promise<{ data: CategoryItem[]; error
     }
   }
 
-  // 3. Fallback to local storage (only admin-added categories)
+  // 2. Fallback: Fetch from Supabase Cloud Storage (authoritative cross-device sync)
+  try {
+    const cloudCategories = await fetchCategoriesFromCloud();
+    if (cloudCategories !== null && cloudCategories.length > 0) {
+      cachedCategories = cloudCategories;
+      saveLocalCategories(cloudCategories);
+      return { data: cloudCategories, error: null };
+    }
+  } catch {}
+
+  // 3. Fallback: Local storage
   const local = getLocalCategories();
   cachedCategories = local;
   return { data: local, error: null };
@@ -1765,19 +1792,31 @@ async function _refreshCategoriesFromDb(): Promise<{ data: CategoryItem[]; error
 
 export async function createCategory(
   cat: Omit<CategoryItem, 'id'> & { imageFile?: File | null }
-): Promise<{ success: boolean; data: CategoryItem }> {
-  let imageUrl = cat.image || '/images/royal_blue_anarkali_1788292199640.jpg';
+): Promise<{ success: boolean; data: CategoryItem; error?: string | null }> {
+  let imageUrl = cat.image || '';
 
   // Upload image file if provided
   if (cat.imageFile) {
     const result = await uploadImageFile(cat.imageFile, 'category-images', 'categories');
-    if (!result.error) imageUrl = result.publicUrl;
+    if (!result.error && result.publicUrl) {
+      imageUrl = result.publicUrl;
+    }
   }
+
+  if (!imageUrl) {
+    imageUrl = '/images/royal_blue_anarkali_1788292199640.jpg';
+  }
+
+  const cleanSlug = (cat.slug || cat.title || 'collection')
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/(^-|-$)/g, '') || ('cat-' + Date.now());
 
   const newCat: CategoryItem = {
     id:          'cat-' + Date.now(),
-    title:       cat.title,
-    slug:        cat.slug || cat.title.toLowerCase().replace(/\s+/g, '-'),
+    title:       cat.title.trim(),
+    slug:        cleanSlug,
     count:       cat.count || '40+ Styles',
     image:       imageUrl,
     description: cat.description || '',
@@ -1785,41 +1824,65 @@ export async function createCategory(
   };
 
   const list = getLocalCategories();
-  const updated = [...list, newCat];
+  const updated = [...list.filter(c => c.id !== newCat.id && c.slug !== newCat.slug), newCat];
   saveLocalCategories(updated);
+  cachedCategories = updated;
   syncCategoriesToCloud(updated).catch(() => {});
 
+  // Save directly to Supabase Database table
   const client = dbClient();
+  let dbError: string | null = null;
   if (client && isTableAvailable('categories')) {
     try {
       const { error } = await client.from('categories').upsert({
-        id: newCat.id, title: newCat.title, slug: newCat.slug,
-        count: newCat.count, image: newCat.image,
-        description: newCat.description, featured: newCat.featured
+        id:          newCat.id,
+        title:       newCat.title,
+        slug:        newCat.slug,
+        count:       newCat.count,
+        image:       newCat.image,
+        description: newCat.description,
+        featured:    newCat.featured,
+        sort_order:  updated.length
       });
-      if (isMissingTableError(error)) {
-        markTableUnavailable('categories');
+      if (error) {
+        dbError = error.message;
+        if (isMissingTableError(error)) {
+          markTableUnavailable('categories');
+        }
       }
-    } catch {
-      // silent fallback
+    } catch (err: any) {
+      dbError = err?.message || 'Database insert error';
     }
   }
-  return { success: true, data: newCat };
+
+  // Broadcast update to real-time storefront tabs
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('zaymera_categories_updated', { detail: updated }));
+  }
+
+  return { success: true, data: newCat, error: dbError };
 }
 
-export async function updateCategory(id: string, updates: Partial<CategoryItem> & { imageFile?: File | null }): Promise<{ success: boolean }> {
+export async function updateCategory(
+  id: string,
+  updates: Partial<CategoryItem> & { imageFile?: File | null }
+): Promise<{ success: boolean; error?: string | null }> {
   // Upload image if a new file was provided
   if (updates.imageFile) {
     const result = await uploadImageFile(updates.imageFile, 'category-images', 'categories');
-    if (!result.error) updates.image = result.publicUrl;
+    if (!result.error && result.publicUrl) {
+      updates.image = result.publicUrl;
+    }
   }
 
   const list = getLocalCategories();
   const updated = list.map(c => c.id === id ? { ...c, ...updates } : c);
   saveLocalCategories(updated);
+  cachedCategories = updated;
   syncCategoriesToCloud(updated).catch(() => {});
 
   const client = dbClient();
+  let dbError: string | null = null;
   if (client && isTableAvailable('categories')) {
     try {
       const dbPayload: Record<string, any> = {};
@@ -1830,20 +1893,29 @@ export async function updateCategory(id: string, updates: Partial<CategoryItem> 
       if (updates.description !== undefined) dbPayload.description = updates.description;
       if (updates.featured    !== undefined) dbPayload.featured    = updates.featured;
       const { error } = await client.from('categories').update(dbPayload).eq('id', id);
-      if (isMissingTableError(error)) {
-        markTableUnavailable('categories');
+      if (error) {
+        dbError = error.message;
+        if (isMissingTableError(error)) {
+          markTableUnavailable('categories');
+        }
       }
-    } catch {
-      // silent fallback
+    } catch (err: any) {
+      dbError = err?.message || 'Database update error';
     }
   }
-  return { success: true };
+
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('zaymera_categories_updated', { detail: updated }));
+  }
+
+  return { success: true, error: dbError };
 }
 
 export async function deleteCategory(id: string): Promise<{ success: boolean }> {
   const list = getLocalCategories();
   const updated = list.filter(c => c.id !== id);
   saveLocalCategories(updated);
+  cachedCategories = updated;
   syncCategoriesToCloud(updated).catch(() => {});
 
   const client = dbClient();
@@ -1857,7 +1929,122 @@ export async function deleteCategory(id: string): Promise<{ success: boolean }> 
       // silent fallback
     }
   }
+
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('zaymera_categories_updated', { detail: updated }));
+  }
+
   return { success: true };
+}
+
+/**
+ * Checks connection to the Supabase categories table and category-images storage bucket.
+ * Automatically provisions the storage bucket if missing.
+ */
+export async function checkCategoriesDatabase(): Promise<{
+  isConfigured: boolean;
+  tableExists: boolean;
+  bucketExists: boolean;
+  count: number;
+  error: string | null;
+}> {
+  if (!isSupabaseConfigured) {
+    return {
+      isConfigured: false,
+      tableExists: false,
+      bucketExists: false,
+      count: 0,
+      error: 'Supabase credentials are not configured in your .env file.',
+    };
+  }
+  const client = dbClient();
+  let tableExists = false;
+  let bucketExists = false;
+  let count = 0;
+  let errMsg: string | null = null;
+
+  try {
+    resetSupabaseTableStatus('categories');
+    const { data, error: tErr } = await client.from('categories').select('id');
+    if (!tErr) {
+      tableExists = true;
+      count = data?.length || 0;
+    } else {
+      errMsg = tErr.message;
+      if (isMissingTableError(tErr)) markTableUnavailable('categories');
+    }
+
+    // Verify or auto-create category-images storage bucket
+    try {
+      const { data: bucketData } = await client.storage.getBucket('category-images');
+      if (bucketData) {
+        bucketExists = true;
+      } else if (supabaseAdmin) {
+        const { error: bCreateErr } = await supabaseAdmin.storage.createBucket('category-images', {
+          public: true,
+          fileSizeLimit: 15 * 1024 * 1024,
+          allowedMimeTypes: ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/gif', 'image/svg+xml']
+        });
+        if (!bCreateErr) bucketExists = true;
+      }
+    } catch {
+      // non-blocking
+    }
+
+    return {
+      isConfigured: true,
+      tableExists,
+      bucketExists,
+      count,
+      error: !tableExists ? errMsg : null,
+    };
+  } catch (err: any) {
+    return {
+      isConfigured: true,
+      tableExists: false,
+      bucketExists: false,
+      count: 0,
+      error: err?.message || 'Database connection error',
+    };
+  }
+}
+
+/**
+ * Syncs all local / cached categories into the Supabase 'categories' PostgreSQL database table.
+ */
+export async function syncCategoriesToDatabase(): Promise<{
+  success: boolean;
+  syncedCount: number;
+  error: string | null;
+}> {
+  const local = getLocalCategories();
+  if (!local || local.length === 0) {
+    return { success: true, syncedCount: 0, error: 'No categories found to sync.' };
+  }
+  const client = dbClient();
+  if (!client || !isTableAvailable('categories')) {
+    return { success: false, syncedCount: 0, error: 'Categories database table is unavailable.' };
+  }
+  try {
+    let count = 0;
+    for (let i = 0; i < local.length; i++) {
+      const c = local[i];
+      const { error } = await client.from('categories').upsert({
+        id:          c.id,
+        title:       c.title,
+        slug:        c.slug,
+        count:       c.count || '0 Styles',
+        image:       c.image || '',
+        description: c.description || '',
+        featured:    c.featured ?? false,
+        sort_order:  i
+      });
+      if (!error) count++;
+    }
+    return { success: true, syncedCount: count, error: null };
+  } catch (err: any) {
+    return { success: false, syncedCount: 0, error: err?.message || 'Sync failed' };
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

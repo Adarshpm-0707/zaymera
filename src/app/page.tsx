@@ -45,6 +45,26 @@ export default function Home() {
         setCategoriesList(res.data);
       }
     }).catch(() => {});
+
+    // Listen for live category updates from admin panel across tabs/components
+    const handleCategoryUpdate = (e: any) => {
+      if (e?.detail) {
+        setCategoriesList(e.detail);
+      } else {
+        fetchCategories().then(res => {
+          if (res.data) setCategoriesList(res.data);
+        }).catch(() => {});
+      }
+    };
+    window.addEventListener('zaymera_categories_updated', handleCategoryUpdate);
+    const handleStorageUpdate = (e: StorageEvent) => {
+      if (e.key === 'zaymera_admin_categories') {
+        fetchCategories().then(res => {
+          if (res.data) setCategoriesList(res.data);
+        }).catch(() => {});
+      }
+    };
+    window.addEventListener('storage', handleStorageUpdate);
     // 1. Immediately hydrate from local cache on client mount (avoids hydration mismatch)
     const local = getLocalProducts();
     if (local && local.length > 0) {
@@ -62,6 +82,11 @@ export default function Home() {
     }).finally(() => {
       setIsLoading(false);
     });
+
+    return () => {
+      window.removeEventListener('zaymera_categories_updated', handleCategoryUpdate);
+      window.removeEventListener('storage', handleStorageUpdate);
+    };
   }, []);
 
   // Cart & Wishlist hooks
